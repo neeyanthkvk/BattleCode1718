@@ -2,23 +2,25 @@ import bc.*;
 import java.util.*;
 @SuppressWarnings("unchecked")
 public class Defense {
-   //CONSTANTS
+   // CONSTANTS
    static int maxRound = 1000;   // the number of rounds
    static Planet earth = Planet.Earth;
    static Planet mars = Planet.Mars;
    static Direction[] directions = Direction.values();
    
-   //Other Stuff
+   // Other Stuff
    static GameController gc = new GameController();;
    static PlanetMap eMap = gc.startingMap(earth);
    static PlanetMap mMap = gc.startingMap(mars);
-
+   static AsteroidPattern = gc.asteroidPattern();
    // Initial Earth Stuff
    static boolean[][] passable;
    static PriorityQueue<KarbDeposit> earthKarbs;
    static KarbDeposit[][] karbDep;
    static MapLocation[][] eMapLoc;
-   
+   static Map<Integer,Integer> workingOn;
+    
+
    static {
         for(int i = 0; i < (int) eMap.getWidth(); i++) {
             for(int j = 0; j < (int) eMap.getHeight(); j++) {
@@ -59,10 +61,12 @@ public class Defense {
 
 
    public static void main(String[] args) {
+      while(true) { 
       if(gc.planet().equals(Planet.Earth))
          earth();
       else
          mars();
+      }
    }
    
    
@@ -85,35 +89,29 @@ public class Defense {
             ArrayList<Unit> rangers = ubt[4];
             ArrayList<Unit> rockets = ubt[5];
             ArrayList<Unit> workers = ubt[6];
+            
             long karbs = gc.karbonite();
             
             for(int x = 0; x < workers.size(); x++)
             {
-               Unit w = workers.get(x);
-               cycle: for(int y = 0; y < factories.size(); y++)
-                  try {//not sure if structureIsBuilt() = 0 is when the structure isn't built
-                     if(factories.get(y).structureIsBuilt()==0&&w.location().mapLocation().isAdjacentTo(factories.get(y).location().mapLocation()))
-                     {
-                        gc.build(w.id(),factories.get(y).id());
-                        System.out.println("Worker "+w.id()+" built factory "+factories.get(y).id());
-                        break cycle;
-                     }
-                  } catch(Exception e) {e.printStackTrace();}
-               if(factories.size()==0)
-                  cycle: for(int y = 0; y < 8; y++)
-                     try {
-                        gc.blueprint(w.id(), UnitType.Factory, directions[y]);
-                        System.out.println("Worker "+w.id()+" blueprinted a factory");
-                        break cycle;
-                     } catch(Exception e) {e.printStackTrace();}
-               else
-                  cycle: for(int y = 0; y < 8; y++)
-                     try {
-                        gc.replicate(w.id(), directions[y]);
-                        System.out.println("Worker "+w.id()+" replicated");
-                        break cycle;
-                     } catch(Exception e) {e.printStackTrace();}
-            }
+                Unit w = workers.get(x);
+                // Mining Karbonite?
+                int work = workingOn.get(w.id());
+                if(work < 0) {
+                    Direction d = directions[(0-1)*(work+1)];
+                    Location t = w.location();
+                    MapLocation ml = t.mapLocation();
+                    ml = ml.add(d);
+                    long karboniteAt = gc.karboniteAt(ml);
+                    if(karboniteAt > 0) {
+                        gc.harvest(w,id(),d);     
+                    }
+                    else {
+                        // Karbonite Deposit is Empty - What should it do?
+                    }
+                }
+                // Building Stuffs?
+            }   
             for(int x = 0; x < factories.size(); x++)
             {
             
