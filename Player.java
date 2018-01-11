@@ -49,28 +49,40 @@ public class Player {
             ArrayList<Unit> rangers = ubt[4];
             ArrayList<Unit> rockets = ubt[5];
             ArrayList<Unit> workers = ubt[6];
-            int factoriesBuilt = 0; //number of factories that were built this round
             long karbs = gc.karbonite();
           
             for(int x = 0; x < workers.size(); x++)
             {
                Unit w = workers.get(x);
+               cycle: for(int y = 0; y < factories.size(); y++)
+                  try {//not sure if structureIsBuilt() = 0 is when the structure isn't built
+                     if(factories.get(y).structureIsBuilt()==0&&w.location().mapLocation().isAdjacentTo(factories.get(y).location().mapLocation()))
+                     {
+                        gc.build(w.id(),factories.get(y).id());
+                        System.out.println("Worker "+w.id()+" built factory "+factories.get(y).id());
+                        break cycle;
+                     }
+                  } catch(Exception e) {e.printStackTrace();}
                if(factories.size()==0)
-                  for(int y = 0; y < 8; y++)
-                     try{
+                  cycle: for(int y = 0; y < 8; y++)
+                     try {
                         gc.blueprint(w.id(), UnitType.Factory, directions[y]);
                         System.out.println("Worker "+w.id()+" blueprinted a factory");
-                        break;
+                        break cycle;
                      } catch(Exception e) {e.printStackTrace();}
                else
-                  for(int y = 0; y < 8; y++)
-                     try{
+                  cycle: for(int y = 0; y < 8; y++)
+                     try {
                         gc.replicate(w.id(), directions[y]);
                         System.out.println("Worker "+w.id()+" replicated");
-                        break;
+                        break cycle;
                      } catch(Exception e) {e.printStackTrace();}
             }
-               
+            for(int x = 0; x < factories.size(); x++)
+            {
+            
+            
+            }
          }
          catch(Exception e) {
             e.printStackTrace();
