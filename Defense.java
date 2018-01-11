@@ -1,7 +1,7 @@
 import bc.*;
 import java.util.*;
 @SuppressWarnings("unchecked")
-public class Player {
+public class Defense {
    //CONSTANTS
    static int maxRound = 1000;   // the number of rounds
    static Planet earth = Planet.Earth;
@@ -18,7 +18,7 @@ public class Player {
    static PriorityQueue<KarbDeposit> earthKarbs;
    static KarbDeposit[][] karbDep;
    static MapLocation[][] eMapLoc;
-
+   
    static {
         for(int i = 0; i < (int) eMap.getWidth(); i++) {
             for(int j = 0; j < (int) eMap.getHeight(); j++) {
@@ -30,6 +30,24 @@ public class Player {
                 }
             }
         }
+
+        /* Start Strategy 1 - Grind & Defend
+         * Generate as much Karbonite as Possible
+         * Have Healers, Rangers, and Knights as defense for Rangers
+         * Late-Game: No need to Dominate Earth - Attempt to Dominate Mars Instead. Bring Mages, Healers, and Knights to dominate Mars. <----- WIN CONDITION
+         * */
+        gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
+        gc.queueResearch(UnitType.Worker);  // 75 Rounds - "Time is of the Essence"
+        gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
+        gc.queueResearch(UnitType.Healer);  // 25 Rounds - "Spirit Water"
+        gc.queueResearch(UnitType.Mage);    // 25 Rounds - "Glass Cannon"
+        gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocketry"
+        gc.queueResearch(UnitType.Knight);  // 25 Rounds - "Armor"
+        gc.queueResearch(UnitType.Knight);  // 75 Rounds - "Even More Armor"
+        gc.queueResearch(UnitType.Mage);    // 75 Rounds - "Glass Cannon II"
+        gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocket Boosters"
+        
+        /*End Strategy 1*/
    }
 
 
