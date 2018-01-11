@@ -7,30 +7,42 @@ public class Player {
    static Planet earth = Planet.Earth;
    static Planet mars = Planet.Mars;
    static Direction[] directions = Direction.values();
+   
    //Other Stuff
    static GameController gc = new GameController();;
    static PlanetMap eMap = gc.startingMap(earth);
    static PlanetMap mMap = gc.startingMap(mars);
+
+   // Initial Earth Stuff
+   static boolean[][] passable;
+   static PriorityQueue<KarbDeposit> earthKarbs;
+   static KarbDeposit[][] karbDep;
+   static MapLocation[][] eMapLoc;
+
+   static {
+        for(int i = 0; i < (int) eMap.getWidth(); i++) {
+            for(int j = 0; j < (int) eMap.getHeight(); j++) {
+                eMapLoc[i][j] = new MapLocation(earth,i,j);
+                karbDep[i][j] = new KarbDeposit(eMapLoc[i][j],eMap.initialKarboniteAt(eMapLoc[i][j]));
+
+                if(karbDep[i][j].dep > 0) {
+                    earthKarbs.add(karbDep[i][j]);
+                }
+            }
+        }
+   }
+
+
+
    public static void main(String[] args) {
       if(gc.planet().equals(Planet.Earth))
          earth();
       else
          mars();
    }
+   
+   
    public static void earth() {
-      PriorityQueue<KarbDeposit> earthKarbs = new PriorityQueue<KarbDeposit>();
-      boolean[][] passable = new boolean[(int)eMap.getWidth()][(int)eMap.getHeight()];
-      KarbDeposit[][] karbDep = new KarbDeposit[(int)eMap.getWidth()][(int)eMap.getHeight()];
-      MapLocation[][] eMapLoc = new MapLocation[(int)eMap.getWidth()][(int)eMap.getHeight()];
-      for(int i = 0; i < (int) eMap.getWidth(); i++) {
-         for(int j = 0; j < (int) eMap.getHeight(); j++) {
-         
-            eMapLoc[i][j] = new MapLocation(earth,i,j);
-            karbDep[i][j] = new KarbDeposit(eMapLoc[i][j], eMap.initialKarboniteAt(eMapLoc[i][j]));
-            if(karbDep[i][j].dep>0)
-               earthKarbs.add(karbDep[i][j]);
-         }
-      }
       int numDep = earthKarbs.size();
       for(int curRound = 0; curRound < maxRound; curRound++)
       {
