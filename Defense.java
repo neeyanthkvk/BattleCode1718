@@ -86,7 +86,7 @@ public class Defense {
             ArrayList<Unit> rockets = ubt[5];
             ArrayList<Unit> workers = ubt[6];
             long karbs = gc.karbonite();
-          
+            
             for(int x = 0; x < workers.size(); x++)
             {
                Unit w = workers.get(x);
