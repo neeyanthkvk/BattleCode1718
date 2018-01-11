@@ -39,14 +39,20 @@ public class Defense {
         gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
         gc.queueResearch(UnitType.Worker);  // 75 Rounds - "Time is of the Essence"
         gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
+        gc.queueResearch(UnitType.Worker)   // 75 Rounds - "Time is of the Essence II"
         gc.queueResearch(UnitType.Healer);  // 25 Rounds - "Spirit Water"
         gc.queueResearch(UnitType.Mage);    // 25 Rounds - "Glass Cannon"
         gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocketry"
         gc.queueResearch(UnitType.Knight);  // 25 Rounds - "Armor"
         gc.queueResearch(UnitType.Knight);  // 75 Rounds - "Even More Armor"
         gc.queueResearch(UnitType.Mage);    // 75 Rounds - "Glass Cannon II"
-        gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocket Boosters"
-        
+        gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocket Boosters" (625 Rounds)
+        gc.queueResearch(UnitType.Mage);    // 100 Rounds - "Glass Cannon III" (725 Rounds)
+        //////////////////////////////////////
+        //         EARTH IS GONE            //
+        //////////////////////////////////////
+        gc.queueResearch(UnitType.Healer);
+        gc.queueResearch(UnitType.Ranger);
         /*End Strategy 1*/
    }
 
