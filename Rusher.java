@@ -12,22 +12,23 @@ public class Rusher {
    static GameController gc = new GameController();;
    static PlanetMap eMap = gc.startingMap(earth);
    static PlanetMap mMap = gc.startingMap(mars);
+   static int eWidth = (int) eMap.getWidth();
+   static int eHeight = (int) eMap.getHeight();
+   static Team team;
 
    // Initial Earth Stuff
-   static boolean[][] passable;
-   static PriorityQueue<KarbDeposit> earthKarbs;
-   static KarbDeposit[][] karbDep;
-   static MapLocation[][] eMapLoc;
-   
+   static HashMap<MapLocation, Integer> mapToNum = new HashMap<MapLocation, Integer>();
+   static MapLocation[][] eMapLoc = new MapLocation[eWidth][eHeight];
+   static long[][] karbDep = new long[eWidth][eHeight];
+   static boolean[][] passable = new boolean[eWidth][eHeight];
+   static Path[][] paths = new Path[eWidth][eHeight];
    static {
-      for(int i = 0; i < (int) eMap.getWidth(); i++) {
-         for(int j = 0; j < (int) eMap.getHeight(); j++) {
+      for(int i = 0; i < eWidth; i++) {
+         for(int j = 0; j < eHeight; j++) {
             eMapLoc[i][j] = new MapLocation(earth,i,j);
-            karbDep[i][j] = new KarbDeposit(eMapLoc[i][j],eMap.initialKarboniteAt(eMapLoc[i][j]));
-         
-            if(karbDep[i][j].dep > 0) {
-               earthKarbs.add(karbDep[i][j]);
-            }
+            mapToNum.put(eMapLoc[i][j], i+j*eWidth);
+            karbDep[i][j] = eMap.initialKarboniteAt(eMapLoc[i][j]);
+            passable[i][j] = eMap.isPassableTerrainAt(eMapLoc[i][j])==0;
          }
       }
    
@@ -60,65 +61,63 @@ public class Rusher {
    
    
    public static void earth() {
-      int numDep = earthKarbs.size();
-      for(int curRound = 0; curRound < maxRound; curRound++)
+      System.out.println("Running Earth Player: ");
+      int curRound = 1;
+      System.out.println("Earth Round "+curRound+": ");
+      VecUnit initUnits = eMap.getInitial_units();
+      VecUnit units = gc.myUnits();
+      Unit primary = null;
+      team = primary.team();
+      boolean enemyConnected = false;
+      init: for(int primaryI = 0; primaryI < units.size(); primaryI++)
       {
-         //try-catch is used for everything since if we have an uncaught exception, we lose
-         try
+         primary = units.get(primaryI);
+         for(int targetI = 0; targetI < initUnits.size(); targetI++)
+            if(!initUnits.get(targetI).team().equals(team))
+            {
+               MapLocation m1 = primary.location().mapLocation();
+               MapLocation m2 = initUnits.get(targetI).location().mapLocation();
+               int i1 = mapToNum.get(m1);
+               int i2 = mapToNum.get(m2);
+               paths[i1][i2] = findPath(m1, m2, new ArrayList<MapLocation>());
+               if(paths[i1][i2]!=null)
+               {   
+                  gc.moveRobot(primary.id(), paths[i1][i2].seq.get(0));
+                  gc.blueprint(primary.id(), UnitType.Factory, paths[i1][i2].seq.get(0));
+                  enemyConnected = true;
+                  break init;
+               }
+            }
+      }
+      curRound++;
+      gc.nextTurn();
+      if(enemyConnected)
+         for(; curRound <= maxRound; curRound++)
          {
-            System.out.println("Earth Round "+curRound+": ");
-            VecUnit units = gc.myUnits();
-         
+         //try-catch is used for everything since if we have an uncaught exception, we lose
+            try
+            {
+               System.out.println("Earth Round "+curRound+": ");
+               units = gc.myUnits();
+            
              //Each arraylist contains all of the units of that type
-            ArrayList<Unit>[] ubt = sortUnitTypes(units);
-            ArrayList<Unit> healers = ubt[0];
-            ArrayList<Unit> factories = ubt[1];
-            ArrayList<Unit> knights = ubt[2];
-            ArrayList<Unit> mages = ubt[3];
-            ArrayList<Unit> rangers = ubt[4];
-            ArrayList<Unit> rockets = ubt[5];
-            ArrayList<Unit> workers = ubt[6];
-            long karbs = gc.karbonite();
-          
-            for(int x = 0; x < workers.size(); x++)
-            {
-               Unit w = workers.get(x);
-               cycle: for(int y = 0; y < factories.size(); y++)
-                  try {//not sure if structureIsBuilt() = 0 is when the structure isn't built
-                     if(factories.get(y).structureIsBuilt()==0&&w.location().mapLocation().isAdjacentTo(factories.get(y).location().mapLocation()))
-                     {
-                        gc.build(w.id(),factories.get(y).id());
-                        System.out.println("Worker "+w.id()+" built factory "+factories.get(y).id());
-                        break cycle;
-                     }
-                  } catch(Exception e) {e.printStackTrace();}
-               if(factories.size()==0)
-                  cycle: for(int y = 0; y < 8; y++)
-                     try {
-                        gc.blueprint(w.id(), UnitType.Factory, directions[y]);
-                        System.out.println("Worker "+w.id()+" blueprinted a factory");
-                        break cycle;
-                     } catch(Exception e) {e.printStackTrace();}
-               else
-                  cycle: for(int y = 0; y < 8; y++)
-                     try {
-                        gc.replicate(w.id(), directions[y]);
-                        System.out.println("Worker "+w.id()+" replicated");
-                        break cycle;
-                     } catch(Exception e) {e.printStackTrace();}
+               ArrayList<Unit>[] ubt = sortUnitTypes(units);
+               ArrayList<Unit> healers = ubt[0];
+               ArrayList<Unit> factories = ubt[1];
+               ArrayList<Unit> knights = ubt[2];
+               ArrayList<Unit> mages = ubt[3];
+               ArrayList<Unit> rangers = ubt[4];
+               ArrayList<Unit> rockets = ubt[5];
+               ArrayList<Unit> workers = ubt[6];
+               long karbs = gc.karbonite();
+               
             }
-            for(int x = 0; x < factories.size(); x++)
-            {
-            
-            
+            catch(Exception e) {
+               e.printStackTrace();
             }
-         }
-         catch(Exception e) {
-            e.printStackTrace();
-         }
          //End turn
-         gc.nextTurn(); 
-      }    
+            gc.nextTurn(); 
+         }    
    }
    public static void mars() {
       // Do Something
@@ -151,28 +150,160 @@ public class Rusher {
       }
       return unitsByType;
    }
-}
-class KarbDeposit implements Comparable<KarbDeposit> {
-   MapLocation ml;
-   long dep;
-	
-   public KarbDeposit(MapLocation m, long d) {
-      this.ml = m;
-      this.dep = d;
-   }
-	// LEAST GOES FIRST
-   public int compareTo(KarbDeposit x) {
-      return (int) (0-1) * (int) (this.dep-x.dep);
-   }
-	
-}
-class Path
-{
-   MapLocation ml;
-   Direction dir;
-   public Path(MapLocation m, Direction d)
+   public static int spaces(MapLocation m)
    {
-      ml = m;
-      dir = d;
+      int i = mapToNum.get(m);
+      int xPos = i%eMapLoc.length;
+      int yPos = i/eMapLoc.length;
+      int count = 0;
+      for(int x = Math.max(0, xPos-1); x <= Math.min(eWidth,xPos+1); x++)
+         for(int y = Math.max(0, yPos-1); y <= Math.min(eHeight,yPos+1); y++)
+            if(xPos!=x||yPos!=y)
+               if(passable[x][y])
+                  count++;
+      return count;
+   }
+   public static Path findPath(MapLocation start, MapLocation end, ArrayList<MapLocation> avoid)
+   {
+      int startI = mapToNum.get(start);
+      int endI = mapToNum.get(end);
+      int[][] dist = new int[eWidth][eHeight];
+      int[][] prev = new int[eWidth][eHeight];
+      for(int x = 0; x < prev.length; x++)
+         Arrays.fill(prev[x], -1);
+      LinkedList<Integer> q = new LinkedList<Integer>();
+      q.add(startI);
+      int i = 0;
+      boolean pathFound = false;
+      while(!q.isEmpty())
+      {
+         i = q.remove();
+         if(i==endI)
+         {
+            pathFound = true;
+            break;
+         }
+         int x = i%(int)eWidth;
+         int y = i/(int)eWidth;
+      //North
+         if(checkBounds(x,y+1,avoid)&&dist[x][y+1]==-1&&passable[x][y+1])
+         {
+            dist[x][y+1] = dist[x][y]+1;
+            prev[x][y+1] = (int)(x+y*eWidth);
+            q.add((int)((x)+(y+1)*eWidth));
+         }
+      //Northeast
+         if(checkBounds(x+1,y+1,avoid)&&dist[x+1][y+1]==-1&&passable[x+1][y+1])
+         {
+            dist[x+1][y+1] = dist[x][y]+1;
+            prev[x+1][y+1] = (int)(x+y*eWidth);
+            q.add((int)((x+1)+(y+1)*eWidth));
+         }
+      //East
+         if(checkBounds(x+1,y,avoid)&&dist[x+1][y]==-1&&passable[x+1][y])
+         {
+            dist[x+1][y] = dist[x][y]+1;
+            prev[x+1][y] = (int)(x+y*eWidth);
+            q.add((int)((x+1)+(y)*eWidth));
+         }
+      //Southeast
+         if(checkBounds(x+1,y-1,avoid)&&dist[x+1][y-1]==-1&&passable[x+1][y-1])
+         {
+            dist[x+1][y-1] = dist[x][y]+1;
+            prev[x+1][y-1] = (int)(x+y*eWidth);
+            q.add((int)((x+1)+(y-1)*eWidth));
+         }
+      //South
+         if(checkBounds(x,y-1,avoid)&&dist[x][y-1]==-1&&passable[x][y-1])
+         {
+            dist[x][y-1] = dist[x][y]+1;
+            prev[x][y-1] = (int)(x+y*eWidth);
+            q.add((int)((x)+(y-1)*eWidth));
+         }
+      //Southwest
+         if(checkBounds(x-1,y-1,avoid)&&dist[x-1][y-1]==-1&&passable[x-1][y-1])
+         {
+            dist[x-1][y-1] = dist[x][y]+1;
+            prev[x-1][y-1] = (int)(x+y*eWidth);
+            q.add((int)((x-1)+(y-1)*eWidth));
+         }
+      //West
+         if(checkBounds(x-1,y,avoid)&&dist[x+1][y]==-1&&passable[x-1][y])
+         {
+            dist[x-1][y] = dist[x][y]+1;
+            prev[x-1][y] = (int)(x+y*eWidth);
+            q.add((int)((x-1)+(y)*eWidth));
+         }
+      //Northwest
+         if(checkBounds(x-1,y+1,avoid)&&dist[x-1][y+1]==-1&&passable[x-1][y+1])
+         {
+            dist[x-1][y+1] = dist[x][y]+1;
+            prev[x-1][y+1] = (int)(x+y*eWidth);
+            q.add((int)((x-1)+(y+1)*eWidth));
+         }
+      }   
+      if(!pathFound)
+         return null;
+      Path p = new Path(eMapLoc[startI%eWidth][startI/eWidth], eMapLoc[endI%eWidth][endI/eWidth]);
+      while(prev[i%eWidth][i/eWidth]!=-1)
+      {
+         p.seq.add(eMapLoc[i%eWidth][i/eWidth].directionTo(eMapLoc[prev[i%eWidth][i/eWidth]%eWidth][prev[i%eWidth][i/eWidth]/eWidth]));
+         i = prev[i%eWidth][i/eWidth];
+      }
+      return p;
+   }
+   public static boolean checkBounds(int x, int y, ArrayList<MapLocation> avoid)
+   {
+      if(x<0||x>=eWidth||y<0||y>=eHeight)
+         return false;
+      for(int a = 0; a < avoid.size(); a++)
+         if(mapToNum.get(avoid.get(a))==x+y*eWidth)
+            return false;
+      return true;
+   }
+   public static Direction oppositeDirection(Direction d)
+   {
+      if(d.equals(Direction.North))
+         return Direction.South;
+      if(d.equals(Direction.Northeast))
+         return Direction.Southwest;
+      if(d.equals(Direction.East))
+         return Direction.West;
+      if(d.equals(Direction.Southeast))
+         return Direction.Northwest;
+      if(d.equals(Direction.South))
+         return Direction.North;
+      if(d.equals(Direction.Southwest))
+         return Direction.Northeast;
+      if(d.equals(Direction.West))
+         return Direction.East;
+      if(d.equals(Direction.Northwest))
+         return Direction.Southeast;
+      return null;
+   }
+   public static void floodfill()
+   {
+   
+   
+   
+   }
+   static class Path
+   {
+      MapLocation start;
+      MapLocation end;
+      ArrayList<Direction> seq;
+      public Path(MapLocation s, MapLocation e)
+      {
+         start = s;
+         end = e;
+         seq = new ArrayList<Direction>();
+      }
+      public Path copy()
+      {
+         Path p = new Path(start, end);
+         for(int x = 0; x < seq.size(); x++)
+            p.seq.add(seq.get(x));
+         return p;
+      }
    }
 }
