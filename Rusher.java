@@ -20,34 +20,33 @@ public class Rusher {
    static MapLocation[][] eMapLoc;
    
    static {
-        for(int i = 0; i < (int) eMap.getWidth(); i++) {
-            for(int j = 0; j < (int) eMap.getHeight(); j++) {
-                eMapLoc[i][j] = new MapLocation(earth,i,j);
-                karbDep[i][j] = new KarbDeposit(eMapLoc[i][j],eMap.initialKarboniteAt(eMapLoc[i][j]));
-
-                if(karbDep[i][j].dep > 0) {
-                    earthKarbs.add(karbDep[i][j]);
-                }
+      for(int i = 0; i < (int) eMap.getWidth(); i++) {
+         for(int j = 0; j < (int) eMap.getHeight(); j++) {
+            eMapLoc[i][j] = new MapLocation(earth,i,j);
+            karbDep[i][j] = new KarbDeposit(eMapLoc[i][j],eMap.initialKarboniteAt(eMapLoc[i][j]));
+         
+            if(karbDep[i][j].dep > 0) {
+               earthKarbs.add(karbDep[i][j]);
             }
-        }
-
-        /* Start Strategy 1 - Grind & Defend
-         * Generate as much Karbonite as Possible
-         * Have Healers, Rangers, and Knights as defense for Rangers
-         * Late-Game: No need to Dominate Earth - Attempt to Dominate Mars Instead. Bring Mages, Healers, and Knights to dominate Mars. <----- WIN CONDITION
-         * */
-        gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
-        gc.queueResearch(UnitType.Worker);  // 75 Rounds - "Time is of the Essence"
-        gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
-        gc.queueResearch(UnitType.Healer);  // 25 Rounds - "Spirit Water"
-        gc.queueResearch(UnitType.Mage);    // 25 Rounds - "Glass Cannon"
-        gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocketry"
-        gc.queueResearch(UnitType.Knight);  // 25 Rounds - "Armor"
-        gc.queueResearch(UnitType.Knight);  // 75 Rounds - "Even More Armor"
-        gc.queueResearch(UnitType.Mage);    // 75 Rounds - "Glass Cannon II"
-        gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocket Boosters"
+         }
+      }
+   
+        /* Start Strategy 2 - Rush
+         * Harass enemy early on by targetting workers to give them a slow start
+         * Snipe == Win Condition, make as many Rangers as possible, use knights as meat shields with healers supporting them
+         * Dominate on Earth to weaken enemy's late game in Mars
+                     * */
+      gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
+      gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
+      gc.queueResearch(UnitType.Ranger);  // 100 Rounds - "Scopes"
+      gc.queueResearch(UnitType.Ranger);  // 200 Rounds - "Snipe"
+      gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocketry"
+      gc.queueResearch(UnitType.Knight);  // 25 Rounds - "Armor"
+      gc.queueResearch(UnitType.Knight);  // 75 Rounds - "Even More Armor"
+      gc.queueResearch(UnitType.Healer);  // 25 Rounds - "Spirit Water"
+      gc.queueResearch(UnitType.Healer);  // 100 Rounds - "Spirit Water II"
         
-        /*End Strategy 1*/
+        /*End Strategy 2*/
    }
 
 
@@ -166,4 +165,14 @@ class KarbDeposit implements Comparable<KarbDeposit> {
       return (int) (0-1) * (int) (this.dep-x.dep);
    }
 	
+}
+class Path
+{
+   MapLocation ml;
+   Direction dir;
+   public Path(MapLocation m, Direction d)
+   {
+      ml = m;
+      dir = d;
+   }
 }
