@@ -321,9 +321,12 @@ public class Rusher {
    }
    public static boolean checkAvoid(Pair id, ArrayList<MapLocation> avoid)
    {
-      for(int a = 0; a < avoid.size(); a++)
-         if(mapID(avoid.get(a)).equals(id))
-            return false;
+      if(id.x<0||id.x>=eWidth||id.y<0||id.y>=eHeight)
+         return false;
+      if(avoid!=null)
+         for(int a = 0; a < avoid.size(); a++)
+            if(mapID(avoid.get(a)).equals(id))
+               return false;
       return true;
    }
    public static Direction oppositeDirection(Direction d)
@@ -374,11 +377,14 @@ public class Rusher {
          Pair id = q.remove();
          karbAdjOrder.add(new KarbAdjacent(id, countKarbAdj(id.x, id.y)));
          for(Direction d: directions)
-         {
-            Pair next = mapID(eMapLoc[id.x][id.y].add(d));
-            used[next.x][next.y] = true;
-            q.add(next);
-         }
+            try{
+               Pair next = mapID(eMapLoc[id.x][id.y].add(d));   
+               if(checkAvoid(next, null))
+               {
+                  used[next.x][next.y] = true;
+                  q.add(next);
+               }
+            } catch(Exception e) {e.printStackTrace();}
       }
       Collections.sort(karbAdjOrder);
       return karbAdjOrder;
