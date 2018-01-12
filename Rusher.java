@@ -15,11 +15,13 @@ public class Rusher {
    static int eWidth = (int) eMap.getWidth();
    static int eHeight = (int) eMap.getHeight();
    static Team team;
+   static HashMap<Integer, MapLocation> unitTarget = new HashMap<Integer, MapLocation>();
 
    // Initial Earth Stuff
    static HashMap<MapLocation, Integer> mapToNum = new HashMap<MapLocation, Integer>();
    static MapLocation[][] eMapLoc = new MapLocation[eWidth][eHeight];
-   static long[][] karbDep = new long[eWidth][eHeight];
+   static long[][] karbDep = new long[eWidth][eHeight];//amount of karbonite in the square
+   static long[][] karbAdj = new long[eWidth][eHeight];//sum of karbonite on and adjacent to the square
    static boolean[][] passable = new boolean[eWidth][eHeight];
    static Path[][] paths = new Path[eWidth][eHeight];
    static {
@@ -31,7 +33,10 @@ public class Rusher {
             passable[i][j] = eMap.isPassableTerrainAt(eMapLoc[i][j])==0;
          }
       }
-   
+      for(int x = 0; x < eWidth; x++)
+         for(int y = 0; y < eHeight; y++)
+            karbAdj[x][y] = countKarbAdj(x,y);
+     
         /* Start Strategy 2 - Rush
          * Harass enemy early on by targetting workers to give them a slow start
          * Snipe == Win Condition, make as many Rangers as possible, use knights as meat shields with healers supporting them
@@ -63,6 +68,7 @@ public class Rusher {
    public static void earth() {
       System.out.println("Running Earth Player: ");
       int curRound = 1;
+      //first round
       System.out.println("Earth Round "+curRound+": ");
       VecUnit initUnits = eMap.getInitial_units();
       VecUnit units = gc.myUnits();
@@ -88,9 +94,17 @@ public class Rusher {
                   break init;
                }
             }
+         primary = null;
       }
+      //finds the highest karbAdj locations for each starting unit
+      for(int x = 0; x < units.size(); x++)
+         if(units.get(x).equals(primary))
+         {
+         
+         }
       curRound++;
       gc.nextTurn();
+      //end of first round
       if(enemyConnected)
          for(; curRound <= maxRound; curRound++)
          {
@@ -281,11 +295,29 @@ public class Rusher {
          return Direction.Southeast;
       return null;
    }
-   public static void floodfill()
+   public static int countKarbAdj(int xPos, int yPos)
    {
+      int count = 0;
+      for(int x = Math.max(0, xPos-1); x < Math.min(eWidth-1, xPos+1); x++)
+         for(int y = Math.max(0, yPos-1); y < Math.min(eHeight-1, yPos+1); y++)
+            count+=karbDep[x][y];
+      return count;
+   }
+   //floodfills region to count karbonite total
+   public static int countKarbRegion(MapLocation m)
+   {
+      int karbCount = 0;
+   
+      return karbCount;
+   }
+   //floodfills region and returns a priorityqueue containing locations with highest karbAdj value
+   public static PriorityQueue<KarbDeposit> countMaxKarbAdj(MapLocation m)
+   {
+      PriorityQueue<KarbDeposit> karbOrder = new PriorityQueue<KarbDeposit>();
+      LinkedList<Integer> q = new LinkedList<Integer>();
    
    
-   
+      return karbOrder;
    }
    static class Path
    {
@@ -305,5 +337,19 @@ public class Rusher {
             p.seq.add(seq.get(x));
          return p;
       }
+   }
+   static class KarbDeposit implements Comparable<KarbDeposit> {
+      MapLocation ml;
+      long dep;
+   
+      public KarbDeposit(MapLocation m, long d) {
+         this.ml = m;
+         this.dep = d;
+      }
+   // LEAST GOES FIRST
+      public int compareTo(KarbDeposit x) {
+         return (int) (0-1) * (int) (this.dep-x.dep);
+      }
+   
    }
 }
