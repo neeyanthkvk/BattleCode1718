@@ -7,19 +7,24 @@ public class Defense {
    static Planet earth = Planet.Earth;
    static Planet mars = Planet.Mars;
    static Direction[] directions = Direction.values();
-   
+      
    // Other Stuff
    static GameController gc = new GameController();;
    static PlanetMap eMap = gc.startingMap(earth);
    static PlanetMap mMap = gc.startingMap(mars);
    static AsteroidPattern = gc.asteroidPattern();
+   
    // Initial Earth Stuff
    static boolean[][] passable;
    static PriorityQueue<KarbDeposit> earthKarbs;
    static KarbDeposit[][] karbDep;
    static MapLocation[][] eMapLoc;
-   static Map<Integer,Integer> workingOn;
-    
+   static int maxFactory = 8;
+   static int maxRockets = 15;
+
+   // Worker Stuff
+   static HashMap<Integer,Integer> workingOn;
+   static HashMap<Integer,String>   taskName; 
 
    static {
         for(int i = 0; i < (int) eMap.getWidth(); i++) {
@@ -95,22 +100,62 @@ public class Defense {
             for(int x = 0; x < workers.size(); x++)
             {
                 Unit w = workers.get(x);
+
+
                 // Mining Karbonite?
                 int work = workingOn.get(w.id());
-                if(work < 0) {
+                String task = taskName.get(w.id());
+                if(task.equals("mine")) {
                     Direction d = directions[(0-1)*(work+1)];
                     Location t = w.location();
                     MapLocation ml = t.mapLocation();
                     ml = ml.add(d);
                     long karboniteAt = gc.karboniteAt(ml);
                     if(karboniteAt > 0) {
-                        gc.harvest(w,id(),d);     
+                        gc.harvest(w.id(),d);     
                     }
                     else {
-                        // Karbonite Deposit is Empty - What should it do?
+                        // Karbonite Deposit is Empty - What should it do? Just look for another Mine or Be Smarter?
+                        taskName.put(w.id(),"getMine");  // Looks like dumb way xD
                     }
                 }
-                // Building Stuffs?
+                if(task.equals("getMine") {
+                    // GET TO CLOSEST MINE
+                }
+                
+                // Blueprinting Stuffs
+                if(task.equals("printRocket") {
+                    if(gc.karbonite() > 250) {
+                        Direction d;
+                        int idNew = -1;
+                        for(Direction temp:directions) {
+                            if(gc.canBlueprint(w.id(),UnitType.Rocket,temp) {
+                                d = temp;
+                                gc.blueprint(w.id(),UnitTYpe.Rocket,temp);
+                            }
+                        }
+                        if(d != null) {
+                            MapLocation ml = w.location().mapLocation().add(d);
+                            VecUnit tempUnits = gc.myUnits();  
+                            for(int i = 0; i < tempUnits.size(); i++) {
+                                Unit tempUnit = tempUnits.get(i);
+                                if(tempUnit.location().mapLocation().equals(ml)) {
+                                    idNew = tempUnit.id();
+                                    break;
+                                }
+                            }
+                        }
+                        else {
+                           // No Where to GO??????
+                           // This Robot Can't do anything... what do we do :( (I guess we can make the blueprinting method in general smarter)
+                           System.out.println("Rip Robot " + w.id() + " he can't go anywhere.");
+                        }
+                    }
+                    else {
+                        // Send him to go get Karbonite -- Emplace RocketMaker in the Queue
+                        taskName.put(w.id(),"getMine");
+                    }
+                }
             }   
             for(int x = 0; x < factories.size(); x++)
             {
