@@ -12,7 +12,7 @@ public class Defense {
    static GameController gc = new GameController();;
    static PlanetMap eMap = gc.startingMap(earth);
    static PlanetMap mMap = gc.startingMap(mars);
-   static AsteroidPattern = gc.asteroidPattern();
+   static AsteroidPattern ap = gc.asteroidPattern();
    
    // Initial Earth Stuff
    static boolean[][] passable;
@@ -46,7 +46,7 @@ public class Defense {
         gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
         gc.queueResearch(UnitType.Worker);  // 75 Rounds - "Time is of the Essence"
         gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
-        gc.queueResearch(UnitType.Worker)   // 75 Rounds - "Time is of the Essence II"
+        gc.queueResearch(UnitType.Worker);   // 75 Rounds - "Time is of the Essence II"
         gc.queueResearch(UnitType.Healer);  // 25 Rounds - "Spirit Water"
         gc.queueResearch(UnitType.Mage);    // 25 Rounds - "Glass Cannon"
         gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocketry"
@@ -119,19 +119,20 @@ public class Defense {
                         taskName.put(w.id(),"getMine");  // Looks like dumb way xD
                     }
                 }
-                if(task.equals("getMine") {
+                if(task.equals("getMine")) {
                     // GET TO CLOSEST MINE
+                	System.out.println("GET TO THE MINE");
                 }
                 
                 // Blueprinting Stuffs
-                if(task.equals("printRocket") {
+                if(task.equals("printRocket")) {
                     if(gc.karbonite() > 250) {
-                        Direction d;
+                        Direction d = null;
                         int idNew = -1;
                         for(Direction temp:directions) {
-                            if(gc.canBlueprint(w.id(),UnitType.Rocket,temp) {
+                            if(gc.canBlueprint(w.id(),UnitType.Rocket,temp)) {
                                 d = temp;
-                                gc.blueprint(w.id(),UnitTYpe.Rocket,temp);
+                                gc.blueprint(w.id(),UnitType.Rocket,temp);
                             }
                         }
                         if(d != null) {
