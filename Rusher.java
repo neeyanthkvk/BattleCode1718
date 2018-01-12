@@ -2,29 +2,33 @@ import bc.*;
 import java.util.*;
 @SuppressWarnings("unchecked")
 public class Rusher {
-   //CONSTANTS
+   //Basic Info 
    static int maxRound = 1000;   // the number of rounds
    static Planet earth = Planet.Earth;
    static Planet mars = Planet.Mars;
    static Direction[] directions = Direction.values();
-   
-   //Other Stuff
    static GameController gc = new GameController();;
    static PlanetMap eMap = gc.startingMap(earth);
    static PlanetMap mMap = gc.startingMap(mars);
    static int eWidth = (int) eMap.getWidth();
    static int eHeight = (int) eMap.getHeight();
-   static Team team;
+   static int mWidth = (int) mMap.getWidth();
+   static int mHeight = (int) mMap.getHeight();
+   static Team team = gc.team();
+   
+   //Unit Info
    static HashMap<Integer, Unit> idUnits = new HashMap<Integer, Unit>();
+   static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
    static HashMap<Integer, MapLocation> unitTarget = new HashMap<Integer, MapLocation>();
    static boolean[][] beingMined = new boolean[eWidth][eHeight];
 
-   // Initial Earth Stuff
+   // Map Info
    static MapLocation[][] eMapLoc = new MapLocation[eWidth][eHeight];
    static long[][] karbDep = new long[eWidth][eHeight];//amount of karbonite in the square
    static long[][] karbAdj = new long[eWidth][eHeight];//sum of karbonite on and adjacent to the square
    static boolean[][] passable = new boolean[eWidth][eHeight];
    static Path[][][][] paths = new Path[eWidth][eHeight][eWidth][eHeight];
+   
    static {
       for(int i = 0; i < eWidth; i++) {
          for(int j = 0; j < eHeight; j++) {
@@ -431,6 +435,23 @@ public class Rusher {
    // greatest goes first
       public int compareTo(KarbAdjacent x) {
          return x.dep-dep;
+      }
+   }
+   static class Task
+   {
+      int unitID;
+   /* 
+      0: moving
+      1: mining
+      2: blueprinting
+      3: building
+   */
+      int taskID; 
+      int buildID;
+      public Task(int id, int task)
+      {
+         unitID = id;
+         taskID = task;
       }
    }
 }
