@@ -67,10 +67,13 @@ public class Rusher {
    
    public static void earth() {
       try {
+         long startTime = System.currentTimeMillis();
+         System.out.println("start time = "+startTime);
          System.out.println("Running Earth Player: ");
          int curRound = 1;
       //first round
          System.out.println("Earth Round "+curRound+": ");
+         System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
          VecUnit initUnits = eMap.getInitial_units();
          VecUnit myUnits = gc.myUnits();
          ArrayList<Integer> initID = new ArrayList<Integer>();
@@ -118,6 +121,8 @@ public class Rusher {
       //end of first round
          for(; curRound <= 10; curRound++)
          {
+            System.out.println("Earth Round "+curRound+": ");
+            System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
             ArrayList<Unit>[] ubt = sortUnitTypes(myUnits);
             ArrayList<Unit> healers = ubt[0];
             ArrayList<Unit> factories = ubt[1];
@@ -146,6 +151,7 @@ public class Rusher {
                try
                {
                   System.out.println("Earth Round "+curRound+": ");
+                  System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
                   myUnits = gc.myUnits();
                   ArrayList<Unit>[] ubt = sortUnitTypes(myUnits); //units by type
                   ArrayList<Unit> healers = ubt[0];
