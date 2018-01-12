@@ -73,7 +73,7 @@ public class Rusher {
       VecUnit initUnits = eMap.getInitial_units();
       VecUnit units = gc.myUnits();
       Unit primary = null;
-      team = primary.team();
+      team = units.get(0).team();
       boolean enemyConnected = false;
       init: for(int primaryI = 0; primaryI < units.size(); primaryI++)
       {
