@@ -103,20 +103,18 @@ public class Rusher {
                primary = start;
                for(int target: enemyInit)
                {
-                  MapLocation m1 = gc.unit(start).location().mapLocation();
-                  MapLocation m2 = gc.unit(target).location().mapLocation();
-                  Pair p1 = mapID(m1);
-                  Pair p2 = mapID(m2);
-                  paths[p1.x][p1.y][p2.x][p2.y] = findPath(m1, m2, new ArrayList<MapLocation>());
+                  Pair p1 = mapPair(gc.unit(start).location().mapLocation());
+                  Pair p2 = mapPair(gc.unit(target).location().mapLocation());
+                  paths[p1.x][p1.y][p2.x][p2.y] = findPath(p1, p2, new ArrayList<MapLocation>());
                   if(paths[p1.x][p1.y][p2.x][p2.y]!=null)
                   {   
                      Task t = new Task(primary);
-                     t.targetLoc = m2;
+                     t.moveTarget = p2;
                      tasks.get(primary).typeOn[0] = true;
-                     tasks.get(primary).targetLoc = m2;
+                     tasks.get(primary).moveTarget = p2;
                      move(primary, true);
                      tasks.get(primary).typeOn[0] = false;
-                     tasks.get(primary).targetLoc = null;
+                     tasks.get(primary).moveTarget = null;
                      t.buildID = blueprint(primary, UnitType.Factory, oppositeDirection(paths[p1.x][p1.y][p2.x][p2.y].seq.get(0)));
                      enemyConnected = true;
                      break init;
@@ -131,7 +129,7 @@ public class Rusher {
                if(id!=primary)
                {
                   tasks.get(id).typeOn[0] = true;
-                  tasks.get(id).targetLoc = bestKarbAdj.get(id).remove().loc;
+                  tasks.get(id).moveTarget = bestKarbAdj.get(id).remove().loc;
                   move(id, false);
                }
             }
@@ -215,7 +213,7 @@ public class Rusher {
    public static boolean mine(int id)
    {
       Unit u = gc.unit(id);
-      Pair p = mapID(u.location().mapLocation());
+      Pair p = mapPair(u.location().mapLocation());
       int xPos = p.x;
       int yPos = p.y;
       Direction best = null;
@@ -240,11 +238,11 @@ public class Rusher {
    public static int move(int id, boolean engage) 
    {
       Unit u = gc.unit(id);
-      Pair prev = mapID(u.location().mapLocation());
-      Pair target = mapID(tasks.get(id).targetLoc);
+      Pair prev = mapPair(u.location().mapLocation());
+      Pair target = tasks.get(id).moveTarget;
       if(prev.equals(target))
       {
-         tasks.get(id).targetLoc = null;
+         tasks.get(id).moveTarget = null;
          return 1;
       }
       if(gc.canMove(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0)))
@@ -254,9 +252,9 @@ public class Rusher {
          else
          {
             gc.moveRobot(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0));
-            Pair p = mapID(u.location().mapLocation());
+            Pair p = mapPair(u.location().mapLocation());
             paths[p.x][p.y][target.x][target.y] = paths[prev.x][prev.y][target.x][target.y].copy();
-            paths[p.x][p.y][target.x][target.y].start = u.location().mapLocation();
+            paths[p.x][p.y][target.x][target.y].start = mapPair(u.location().mapLocation());
             paths[p.x][p.y][target.x][target.y].seq.remove(0);
             return 0;
          }
@@ -302,7 +300,7 @@ public class Rusher {
    }
    public static int spaces(MapLocation m)
    {
-      Pair id = mapID(m);
+      Pair id = mapPair(m);
       int count = 0;
       for(int x = Math.max(0, id.x-1); x <= Math.min(eWidth,id.x+1); x++)
          for(int y = Math.max(0, id.y-1); y <= Math.min(eHeight,id.y+1); y++)
@@ -311,23 +309,21 @@ public class Rusher {
                   count++;
       return count;
    }
-   public static Path findPath(MapLocation start, MapLocation end, ArrayList<MapLocation> avoid)
+   public static Path findPath(Pair start, Pair end, ArrayList<MapLocation> avoid)
    {
-      Pair startID = mapID(start);
-      Pair endID = mapID(end);
       int[][] dist = new int[eWidth][eHeight];
       Pair[][] prev = new Pair[eWidth][eHeight];
       for(int x = 0; x < dist.length; x++)
          Arrays.fill(dist[x], -1);
-      dist[startID.x][startID.y] = 0;
+      dist[start.x][start.y] = 0;
       LinkedList<Pair> q = new LinkedList<Pair>();
-      q.add(startID);
+      q.add(start);
       Pair id = null;
       boolean pathFound = false;
       while(!q.isEmpty())
       {
          id = q.remove();
-         if(id.equals(endID))
+         if(id.equals(end))
          {
             pathFound = true;
             break;
@@ -336,7 +332,7 @@ public class Rusher {
             if(!d.equals(Direction.Center))
                try
                {
-                  Pair next = mapID(eMapLoc[id.x][id.y].add(d));
+                  Pair next = mapPair(eMapLoc[id.x][id.y].add(d));
                   if(inBounds(next)&&avoid(next, avoid)&&dist[next.x][next.y]==-1)
                   {
                      dist[next.x][next.y] = dist[id.x][id.y]+1;
@@ -347,7 +343,7 @@ public class Rusher {
       }   
       if(!pathFound)
          return null;
-      Path p = new Path(eMapLoc[startID.x][startID.y], eMapLoc[endID.x][endID.y]);
+      Path p = new Path(start, end);
       while(prev[id.x][id.y]!=null)
       {
          p.seq.add(eMapLoc[id.x][id.y].directionTo(eMapLoc[prev[id.x][id.y].x][prev[id.x][id.y].y]));
@@ -374,7 +370,7 @@ public class Rusher {
    {
       if(avoid!=null)
          for(int a = 0; a < avoid.size(); a++)
-            if(mapID(avoid.get(a)).equals(id))
+            if(mapPair(avoid.get(a)).equals(id))
                return false;
       return true;
    }
@@ -419,15 +415,15 @@ public class Rusher {
       boolean[][] used = new boolean[eWidth][eHeight];
       PriorityQueue<KarbAdjacent> karbAdjOrder = new PriorityQueue<KarbAdjacent>();
       LinkedList<Pair> q = new LinkedList<Pair>();
-      used[mapID(m).x][mapID(m).y] = true;
-      q.add(mapID(m));
+      used[mapPair(m).x][mapPair(m).y] = true;
+      q.add(mapPair(m));
       while(!q.isEmpty())
       {
          Pair id = q.remove();
          karbAdjOrder.add(new KarbAdjacent(id, countKarbAdj(id.x, id.y)));
          for(Direction d: directions)
             try{
-               Pair next = mapID(eMapLoc[id.x][id.y].add(d));   
+               Pair next = mapPair(eMapLoc[id.x][id.y].add(d));   
                if(inBounds(next))
                {
                   used[next.x][next.y] = true;
@@ -437,16 +433,16 @@ public class Rusher {
       }
       return karbAdjOrder;
    }
-   public static Pair mapID(MapLocation m)
+   public static Pair mapPair(MapLocation m)
    {
       return new Pair(m.getX(),m.getY());
    }
    static class Path
    {
-      MapLocation start;
-      MapLocation end;
+      Pair start;
+      Pair end;
       ArrayList<Direction> seq;
-      public Path(MapLocation s, MapLocation e)
+      public Path(Pair s, Pair e)
       {
          start = s;
          end = e;
@@ -461,13 +457,11 @@ public class Rusher {
       }
    }
    static class KarbAdjacent implements Comparable<KarbAdjacent> {
-      Pair id;
-      MapLocation loc;
+      Pair loc;
       int dep;
    
       public KarbAdjacent(Pair p, int d) {
-         id = p;
-         loc = eMapLoc[id.x][id.y];
+         loc = p;
          dep = d;
       }
    // greatest goes first
@@ -484,8 +478,8 @@ public class Rusher {
       2: building
    */
       boolean[] typeOn = new boolean[10]; //if the robot is doing task "x"
-      int buildID; //for building
-      MapLocation targetLoc; //for moving
+      int buildID; //for building: target blueprint
+      Pair moveTarget; //for moving: final destination
       public Task(int id)
       {
          unitID = id;
