@@ -17,9 +17,10 @@ public class Rusher {
    static Team myTeam = gc.team();
    
    //Unit Info
-   static HashSet<Integer> myUnits = toIDList(gc.myUnits());
    static HashSet<Integer> enemyInit = toIDList(gc.units());
    static HashSet<Integer> myInit = new HashSet<Integer>();
+   static HashMap<Integer, Integer> initRegion = new HashMap<Integer, Integer>();
+   static HashSet<Integer> myUnits = toIDList(gc.myUnits());
    static HashSet<Integer>[] ubt = sortUnitTypes(gc.myUnits());
    static HashSet<Integer> healers = ubt[0];
    static HashSet<Integer> factories = ubt[1];
@@ -30,53 +31,93 @@ public class Rusher {
    static HashSet<Integer> workers = ubt[6];
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
    static boolean[][] beingMined = new boolean[eWidth][eHeight];
-
-   static {
-      ArrayList<Integer> toRemove = new ArrayList<Integer>();
-      for(int x: enemyInit)
-         if(myUnits.contains(x))
-         {
-            toRemove.add(x);
-            myInit.add(x);
-         }
-      for(int x: toRemove)
-         enemyInit.remove(x);
-   }
    // Map Info
    static MapLocation[][] eMapLoc = new MapLocation[eWidth][eHeight];
    static long[][] karbDep = new long[eWidth][eHeight];//amount of karbonite in the square
    static long[][] karbAdj = new long[eWidth][eHeight];//sum of karbonite on and adjacent to the square
    static boolean[][] passable = new boolean[eWidth][eHeight];
    static Path[][][][] paths = new Path[eWidth][eHeight][eWidth][eHeight];
-   
+   static HashMap<Integer, PriorityQueue<KarbAdjacent>> bestKarbAdj = new HashMap<Integer, PriorityQueue<KarbAdjacent>>();
+
+
+
+//
+   static int primary = -1;
+   static boolean enemyConnected = false;
+ //
+      
+      
    static {
-      for(int i = 0; i < eWidth; i++) {
-         for(int j = 0; j < eHeight; j++) {
-            eMapLoc[i][j] = new MapLocation(earth,i,j);
-            karbDep[i][j] = eMap.initialKarboniteAt(eMapLoc[i][j]);
-            passable[i][j] = eMap.isPassableTerrainAt(eMapLoc[i][j])==0;
+      try {
+         ArrayList<Integer> toRemove = new ArrayList<Integer>();
+         for(int x: enemyInit)
+            if(myUnits.contains(x))
+            {
+               toRemove.add(x);
+               myInit.add(x);
+            }
+         for(int x: toRemove)
+            enemyInit.remove(x);
+         for(int x: myInit)
+            tasks.put(x, new Task(x));
+         
+         for(int i = 0; i < eWidth; i++) {
+            for(int j = 0; j < eHeight; j++) {
+               eMapLoc[i][j] = new MapLocation(earth,i,j);
+               karbDep[i][j] = eMap.initialKarboniteAt(eMapLoc[i][j]);
+               passable[i][j] = eMap.isPassableTerrainAt(eMapLoc[i][j])==0;
+            }
          }
-      }
-      for(int x = 0; x < eWidth; x++)
-         for(int y = 0; y < eHeight; y++)
-            karbAdj[x][y] = countKarbAdj(x,y);
-     
-        /* Start Strategy 2 - Rush
-         * Harass enemy early on by targetting workers to give them a slow start
-         * Snipe == Win Condition, make as many Rangers as possible, use knights as meat shields with healers supporting them
-         * Dominate on Earth to weaken enemy's late game in Mars
-                     * */
-      gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
-      gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
-      gc.queueResearch(UnitType.Ranger);  // 100 Rounds - "Scopes"
-      gc.queueResearch(UnitType.Ranger);  // 200 Rounds - "Snipe"
-      gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocketry"
-      gc.queueResearch(UnitType.Knight);  // 25 Rounds - "Armor"
-      gc.queueResearch(UnitType.Knight);  // 75 Rounds - "Even More Armor"
-      gc.queueResearch(UnitType.Healer);  // 25 Rounds - "Spirit Water"
-      gc.queueResearch(UnitType.Healer);  // 100 Rounds - "Spirit Water II"
+         for(int x = 0; x < eWidth; x++)
+            for(int y = 0; y < eHeight; y++)
+               karbAdj[x][y] = countKarbAdj(x,y);
+            
+         init: for(int start: myUnits)
+         {
+            primary = start;
+            for(int target: enemyInit)
+            {
+               Pair p1 = mapPair(gc.unit(start).location().mapLocation());
+               Pair p2 = mapPair(gc.unit(target).location().mapLocation());
+               paths[p1.x][p1.y][p2.x][p2.y] = findPath(p1, p2, new ArrayList<MapLocation>());
+               if(paths[p1.x][p1.y][p2.x][p2.y]!=null)
+               {   
+                  Task t = new Task(primary);
+                  t.moveTarget = p2;
+                  tasks.get(primary).typeOn[0] = true;
+                  tasks.get(primary).moveTarget = p2;
+                  move(primary, true);
+                  tasks.get(primary).typeOn[0] = false;
+                  tasks.get(primary).moveTarget = null;
+                  t.buildID = blueprint(primary, UnitType.Factory, oppositeDirection(paths[p1.x][p1.y][p2.x][p2.y].seq.get(0)));
+                  enemyConnected = true;
+                  break init;
+               }
+            }
+         }
+         //finds the highest karbAdj locations for each starting unit
+         for(int id: myUnits)
+         {
+            bestKarbAdj.put(id, countMaxKarbAdj(gc.unit(id).location().mapLocation()));
+            if(id!=primary)
+            {
+               tasks.get(id).typeOn[0] = true;
+               tasks.get(id).moveTarget = bestKarbAdj.get(id).remove().loc;
+               move(id, false);
+            }
+         }
         
-        /*End Strategy 2*/
+      //Research
+         gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
+         gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
+         gc.queueResearch(UnitType.Ranger);  // 100 Rounds - "Scopes"
+         gc.queueResearch(UnitType.Ranger);  // 200 Rounds - "Snipe"
+         gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocketry"
+         gc.queueResearch(UnitType.Knight);  // 25 Rounds - "Armor"
+         gc.queueResearch(UnitType.Knight);  // 75 Rounds - "Even More Armor"
+         gc.queueResearch(UnitType.Healer);  // 25 Rounds - "Spirit Water"
+         gc.queueResearch(UnitType.Healer);  // 100 Rounds - "Spirit Water II"
+      } catch(Exception e) {e.printStackTrace();}
    }
    public static void main(String[] args) {
       if(gc.planet().equals(Planet.Earth))
@@ -88,76 +129,36 @@ public class Rusher {
       try {
          long startTime = System.currentTimeMillis();
          System.out.println("start time = "+startTime);
-         System.out.println("Running Earth Player: ");
          int curRound = 1;
-         int primary = -1;
-         boolean enemyConnected = false;
       //first round
          try {
             System.out.println("Earth Round "+curRound+": ");
             System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
-            for(int x: myInit)
-               tasks.put(x, new Task(x));
-            init: for(int start: myUnits)
-            {
-               primary = start;
-               for(int target: enemyInit)
-               {
-                  Pair p1 = mapPair(gc.unit(start).location().mapLocation());
-                  Pair p2 = mapPair(gc.unit(target).location().mapLocation());
-                  paths[p1.x][p1.y][p2.x][p2.y] = findPath(p1, p2, new ArrayList<MapLocation>());
-                  if(paths[p1.x][p1.y][p2.x][p2.y]!=null)
-                  {   
-                     Task t = new Task(primary);
-                     t.moveTarget = p2;
-                     tasks.get(primary).typeOn[0] = true;
-                     tasks.get(primary).moveTarget = p2;
-                     move(primary, true);
-                     tasks.get(primary).typeOn[0] = false;
-                     tasks.get(primary).moveTarget = null;
-                     t.buildID = blueprint(primary, UnitType.Factory, oppositeDirection(paths[p1.x][p1.y][p2.x][p2.y].seq.get(0)));
-                     enemyConnected = true;
-                     break init;
-                  }
-               }
-            }
-            HashMap<Integer, PriorityQueue<KarbAdjacent>> bestKarbAdj = new HashMap<Integer, PriorityQueue<KarbAdjacent>>();;
-         //finds the highest karbAdj locations for each starting unit
-            for(int id: myUnits)
-            {
-               bestKarbAdj.put(id, countMaxKarbAdj(gc.unit(id).location().mapLocation()));
-               if(id!=primary)
-               {
-                  tasks.get(id).typeOn[0] = true;
-                  tasks.get(id).moveTarget = bestKarbAdj.get(id).remove().loc;
-                  move(id, false);
-               }
-            }
             curRound++;
             gc.nextTurn();
          } catch(Exception e) {e.printStackTrace();}
       //end of first round
-         for(; curRound <= 10; curRound++)
-         {
-            System.out.println("Earth Round "+curRound+": ");
-            System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
-            updateUnits();
-            for(int id: myUnits)
-               if(id==primary)
-               {
-                  build(primary, tasks.get(primary).buildID);
-               }
-               else
-               {
-                  int arrived = move(id, false);
-                  if(arrived==1)
+         while(gc.round()<=10)
+            try {
+               System.out.println("Earth Round "+curRound+": ");
+               System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
+               updateUnits();
+               for(int id: myUnits)
+                  if(id==primary)
                   {
-                     mine(id);
+                     build(primary, tasks.get(primary).buildID);
                   }
-               }
-            gc.nextTurn();
-         }
-         for(; curRound <= maxRound; curRound++)
+                  else
+                  {
+                     int arrived = move(id, false);
+                     if(arrived==1)
+                     {
+                        mine(id);
+                     }
+                  }
+               gc.nextTurn();
+            } catch(Exception e) {e.printStackTrace();}
+         while(gc.round()<=maxRound)
          {
             //try-catch is used for everything since if we have an uncaught exception, we lose
             try
