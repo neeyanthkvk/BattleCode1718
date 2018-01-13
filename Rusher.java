@@ -69,13 +69,12 @@ public class Rusher {
                if(myUnits.contains(allInit.get(i).id()))
                   myInit.add(allInit.get(i).id());
                else
-               {
-                  System.out.println("looking for enemy location");
                   enemyInit.put(allInit.get(i).id(), mapPair(allInit.get(i).location().mapLocation()));
-                  System.out.println("found enemy location");
-               }
             } catch(Exception e) {e.printStackTrace();}
          System.out.println("Finished initializing all initial units");
+            
+         for(int w: myInit)
+            System.out.println("My initial workers are: "+w);
             
       //initializes tasks
          System.out.println("Initializing tasks");
@@ -121,7 +120,9 @@ public class Rusher {
       //initializes bestKarbAdj and assigns first tasks
          System.out.println("Finding best mining location");
          for(int id: myUnits)
-            bestKarbAdj.put(id, countMaxKarbAdj(unitPair(id)));
+            try {
+               bestKarbAdj.put(id, countMaxKarbAdj(unitPair(id)));
+            } catch(Exception e) {e.printStackTrace();}
          System.out.println("Finished finding best mining location");
             
       //Research
@@ -146,76 +147,71 @@ public class Rusher {
          mars();
    }
    public static void earth() {
-      try {
-         int curRound = 1;
+      int curRound = 1;
       //1st round
+      try {
+         System.out.println("Earth Round "+gc.round()+": ");
+         System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
+         for(int id: myUnits)
+            if(id==primary)
+            {
+               Pair p1 = unitPair(primary);
+               Pair p2 = enemyInit.get(primaryTarget);
+               tasks.get(primary).startMoving(p2);
+               move(id, false);
+               tasks.get(id).stopMoving();
+               int buildID = blueprint(primary, UnitType.Factory, oppositeDirection(paths[p1.x][p1.y][p2.x][p2.y].seq.get(0)));
+               tasks.get(id).startBuilding(buildID);
+            }
+            else
+            {
+               tasks.get(id).startMoving(bestKarbAdj.get(id).remove().loc);
+               move(id, false);
+            }
+         curRound++;
+      } catch(Exception e) {e.printStackTrace();}
+      gc.nextTurn();
+      //rounds 2-10
+      while(gc.round()<=10)
+      {
          try {
             System.out.println("Earth Round "+gc.round()+": ");
             System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
+            updateUnits();
             for(int id: myUnits)
-               if(id==primary)
-               {
-                  Pair p1 = unitPair(primary);
-                  Pair p2 = enemyInit.get(primaryTarget);
-                  System.out.println("ptarget "+primaryTarget);
-                  System.out.println("ptarget loc "+p2);
-                  tasks.get(primary).startMoving(p2);
-                  move(id, false);
-                  tasks.get(id).stopMoving();
-                  int buildID = blueprint(primary, UnitType.Factory, oppositeDirection(paths[p1.x][p1.y][p2.x][p2.y].seq.get(0)));
-                  tasks.get(id).startBuilding(buildID);
-               }
-               else
-               {
-                  tasks.get(id).startMoving(bestKarbAdj.get(id).remove().loc);
-                  move(id, false);
-               }
-            curRound++;
-            gc.nextTurn();
-         } catch(Exception e) {e.printStackTrace();}
-      //rounds 2-10
-         while(gc.round()<=10)
-            try {
-               System.out.println("Earth Round "+gc.round()+": ");
-               System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
-               updateUnits();
-               for(int id: myUnits)
-               {
-                  if(tasks.get(id).moveTarget!=null&&move(id, false)==1)
-                  {
-                     tasks.get(id).stopMoving();
-                     tasks.get(id).startMining();
-                  }
-                  tasks.get(id).doTask();
-               }
-               gc.nextTurn();
-            } catch(Exception e) {e.printStackTrace();}
-      //rounds 11-1000
-         while(gc.round()<=maxRound)
-         {
-            //try-catch is used for everything since if we have an uncaught exception, we lose
-            try
             {
-               System.out.println("Earth Round "+gc.round()+": ");
-               System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
-               updateUnits();
-               for(int id: myUnits)
+               if(tasks.get(id).moveTarget!=null&&move(id, false)==1)
                {
-                  if(tasks.get(id).moveTarget!=null&&move(id, false)==1)
-                  {
-                     tasks.get(id).stopMoving();
-                     tasks.get(id).startMining();
-                  }
-                  tasks.get(id).doTask();
+                  tasks.get(id).stopMoving();
+                  tasks.get(id).startMining();
                }
-               gc.nextTurn();
-            } catch(Exception e) {e.printStackTrace();} 
-         }
+               tasks.get(id).doTask();
+            }
+         } catch(Exception e) {e.printStackTrace();}
+         gc.nextTurn();
+      }
+      //rounds 11-1000
+      while(gc.round()<=maxRound)
+      {
+            //try-catch is used for everything since if we have an uncaught exception, we lose
+         try
+         {
+            System.out.println("Earth Round "+gc.round()+": ");
+            System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
+            updateUnits();
+            for(int id: myUnits)
+            {
+               if(tasks.get(id).moveTarget!=null&&move(id, false)==1)
+               {
+                  tasks.get(id).stopMoving();
+                  tasks.get(id).startMining();
+               }
+               tasks.get(id).doTask();
+            }
+         } catch(Exception e) {e.printStackTrace();} 
+         gc.nextTurn();
+      }
          //End of match
-      }
-      catch(Exception e) {
-         e.printStackTrace();
-      }
    }
    public static void mars() {
       // Do Something
@@ -236,21 +232,17 @@ public class Rusher {
       else 
          return 0;
    }
-   public static int blueprint(int id, UnitType ut, Direction d)
+   //
+   public static int blueprint(int id, UnitType ut, Direction d) throws Exception
    {
-      Unit u = gc.unit(id);
-      HashSet<Integer> prevFact = factories;
       if(gc.canBlueprint(id, ut, d))
+      {
          gc.blueprint(id, ut, d);
-      else
-         return -1;
-      int blueID = -2;
-      for(int x: factories)
-         if(!prevFact.contains(x))
-            blueID = x;
-      if(blueID==-2)
-         System.out.println("Blueprint method error");
-      return blueID;
+         int blueID = gc.senseUnitAtLocation(gc.unit(id).location().mapLocation().add(d)).id();
+         tasks.put(blueID, new Task(blueID));
+         return blueID;
+      }
+      return -1;
    }
    public static boolean mine(int id)
    {
@@ -276,7 +268,7 @@ public class Rusher {
       }
       return false;
    }
-   //return -1 means path blocked, 0 means move success, 1 means reached target
+   //return -2 means path blocked, -1 means too much heat, 0 means move success, 1 means reached target
    public static int move(int id, boolean engage) 
    {
       Unit u = gc.unit(id);
@@ -287,20 +279,30 @@ public class Rusher {
          tasks.get(id).moveTarget = null;
          return 1;
       }
-      if(gc.canMove(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0)))
-         if(engage)
-         {
-         }
+      //System.out.println("Heat vs cooldown "+gc.unit(id).movementHeat()+" "+gc.unit(id).movementCooldown());
+      System.out.println("Unit "+id+" is trying to move");
+      System.out.println("Its path from ("+prev.x+", "+prev.y+") to ("+target.x+", "+target.y+") is:");
+      System.out.println(paths[prev.x][prev.y][target.x][target.y]);
+      if(gc.canMove(id, paths[prev.x][prev.y][target.x][target.y].seq.getFirst()))
+         if(gc.unit(id).movementHeat()<10)
+            if(engage)
+            {
+            
+            }
+            else
+            {
+               gc.moveRobot(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0));
+               Pair p = unitPair(id);
+               paths[p.x][p.y][target.x][target.y] = paths[prev.x][prev.y][target.x][target.y].copy();
+               paths[p.x][p.y][target.x][target.y].start = mapPair(u.location().mapLocation());
+               paths[p.x][p.y][target.x][target.y].seq.remove();
+               return 0;
+            }
          else
-         {
-            gc.moveRobot(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0));
-            Pair p = unitPair(id);
-            paths[p.x][p.y][target.x][target.y] = paths[prev.x][prev.y][target.x][target.y].copy();
-            paths[p.x][p.y][target.x][target.y].start = mapPair(u.location().mapLocation());
-            paths[p.x][p.y][target.x][target.y].seq.remove();
-            return 0;
-         }
-      return 0;
+            return -1;
+      else
+         return -2;
+      return -3;
    }
    public static void updateUnits()
    {
@@ -393,7 +395,7 @@ public class Rusher {
       Path p = new Path(start, end);
       while(prev[id.x][id.y]!=null)
       {
-         p.seq.add(eMapLoc[id.x][id.y].directionTo(eMapLoc[prev[id.x][id.y].x][prev[id.x][id.y].y]));
+         p.seq.add(eMapLoc[prev[id.x][id.y].x][prev[id.x][id.y].y].directionTo(eMapLoc[id.x][id.y]));
          id = prev[id.x][id.y];
       }
       return p;
@@ -411,7 +413,7 @@ public class Rusher {
    }
    public static boolean inBounds(Pair id)
    {
-      return id.x>=0&&id.x<eWidth&&id.y>=0&&id.y<eHeight;
+      return id.x>=0&&id.x<eWidth&&id.y>=0&&id.y<eHeight&&passable[id.x][id.y];
    }
    public static boolean avoid(Pair id, ArrayList<Pair> avoid)
    {
@@ -471,7 +473,7 @@ public class Rusher {
          for(Direction d: directions)
             try{
                Pair next = mapPair(eMapLoc[id.x][id.y].add(d));   
-               if(inBounds(next))
+               if(inBounds(next)&&!used[next.x][next.y])
                {
                   used[next.x][next.y] = true;
                   q.add(next);
@@ -508,6 +510,14 @@ public class Rusher {
          for(Direction d: seq)
             p.seq.add(d);
          return p;
+      }
+      public String toString()
+      {
+         String s = "[";
+         for(Direction d: seq)
+            s+=d+", ";
+         s = s.substring(0, s.length()-2)+"]";
+         return s;
       }
    }
    static class KarbAdjacent implements Comparable<KarbAdjacent> {
