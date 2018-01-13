@@ -3,6 +3,7 @@ import java.util.*;
 @SuppressWarnings("unchecked")
 public class Rusher {
    //Basic Info 
+   static long startTime = System.currentTimeMillis();
    static int maxRound = 1000;   // the number of rounds
    static Planet earth = Planet.Earth;
    static Planet mars = Planet.Mars;
@@ -17,8 +18,8 @@ public class Rusher {
    static Team myTeam = gc.team();
    
    //Unit Info
-   static HashSet<Integer> enemyInit = toIDList(gc.units());
    static HashSet<Integer> myInit = new HashSet<Integer>();
+   static HashMap<Integer, Pair> enemyInit = new HashMap<Integer, Pair>();
    static HashMap<Integer, Integer> initRegion = new HashMap<Integer, Integer>();
    static HashSet<Integer> myUnits = toIDList(gc.myUnits());
    static HashSet<Integer>[] ubt = sortUnitTypes(gc.myUnits());
@@ -40,38 +41,17 @@ public class Rusher {
    static Path[][][][] paths = new Path[eWidth][eHeight][eWidth][eHeight];
    static HashMap<Integer, PriorityQueue<KarbAdjacent>> bestKarbAdj = new HashMap<Integer, PriorityQueue<KarbAdjacent>>();
 
-
-
-//
+   // temp stuff
    static int primary = -1;
+   static int primaryTarget = -1;
    static boolean enemyConnected = false;
- //
+   //
       
       
    static {
       try {
-      //initializes enemyInit and myInit
-         ArrayList<Integer> toRemove = new ArrayList<Integer>();
-         for(int x: enemyInit)
-            try {
-               if(myUnits.contains(x))
-               {
-                  toRemove.add(x);
-                  myInit.add(x);
-               }
-            } catch(Exception e) {e.printStackTrace();}
-         for(int x: toRemove)
-            try {
-               enemyInit.remove(x);
-            } catch(Exception e) {e.printStackTrace();}
-      //initializes tasks
-         System.out.println("Start tasks");
-         for(int x: myInit)
-            try {
-               tasks.put(x, new Task(x));
-            } catch(Exception e) {e.printStackTrace();}
-         System.out.println("end tasks");
       //initializes eMapLoc, karbDep, and passable
+         System.out.println("Initializing basic map info");
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++) 
                try {
@@ -79,33 +59,73 @@ public class Rusher {
                   karbDep[x][y] = eMap.initialKarboniteAt(eMapLoc[x][y]);
                   passable[x][y] = eMap.isPassableTerrainAt(eMapLoc[x][y])!=0;
                } catch(Exception e) {e.printStackTrace();}
+         System.out.println("Finished initializing basic map info");
+               
+      //initializes myInit and enemyInit
+         System.out.println("Initializing all initial units");
+         VecUnit allInit = eMap.getInitial_units();
+         for(int i = 0; i < allInit.size(); i++)
+            try {
+               if(myUnits.contains(allInit.get(i).id()))
+                  myInit.add(allInit.get(i).id());
+               else
+               {
+                  System.out.println("looking for enemy location");
+                  enemyInit.put(allInit.get(i).id(), mapPair(allInit.get(i).location().mapLocation()));
+                  System.out.println("found enemy location");
+               }
+            } catch(Exception e) {e.printStackTrace();}
+         System.out.println("Finished initializing all initial units");
+            
+      //initializes tasks
+         System.out.println("Initializing tasks");
+         for(int x: myInit)
+            try {
+               tasks.put(x, new Task(x));
+            } catch(Exception e) {e.printStackTrace();}
+         System.out.println("Finished initializing tasks");      
+            
       //initializes karbAdj
+         System.out.println("Finding karbonite sums");
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
                try {
                   karbAdj[x][y] = countKarbAdj(x,y);
                } catch(Exception e) {e.printStackTrace();}
+         System.out.println("Finished finding karbonite sums");
+               
+         for(Direction d: directions)
+            System.out.println(d);
+            
       //initializes primary
+         System.out.println("Finding primary worker");
          init: for(int start: myUnits)
          {
             primary = start;
-            for(int target: enemyInit)
+            for(int target: enemyInit.keySet())
             {
                Pair p1 = unitPair(start);
-               Pair p2 = unitPair(target);
-               paths[p1.x][p1.y][p2.x][p2.y] = findPath(p1, p2, null);
+               Pair p2 = enemyInit.get(target);
+               tasks.get(primary).startMoving(p2);
                if(paths[p1.x][p1.y][p2.x][p2.y]!=null)
                {   
+                  System.out.println("Found path for primary worker");
                   enemyConnected = true;
+                  primaryTarget = target;
                   break init;
                }
             }
          }
+         System.out.println("Primary worker found: "+primary);
+      
       //initializes bestKarbAdj and assigns first tasks
+         System.out.println("Finding best mining location");
          for(int id: myUnits)
             bestKarbAdj.put(id, countMaxKarbAdj(unitPair(id)));
+         System.out.println("Finished finding best mining location");
+            
       //Research
-      
+         System.out.println("Queueing research");
          gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
          gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
          gc.queueResearch(UnitType.Ranger);  // 100 Rounds - "Scopes"
@@ -115,6 +135,8 @@ public class Rusher {
          gc.queueResearch(UnitType.Knight);  // 75 Rounds - "Even More Armor"
          gc.queueResearch(UnitType.Healer);  // 25 Rounds - "Spirit Water"
          gc.queueResearch(UnitType.Healer);  // 100 Rounds - "Spirit Water II"
+         System.out.println("Finished queueing research");
+         
       } catch(Exception e) {e.printStackTrace();}
    }
    public static void main(String[] args) {
@@ -125,8 +147,6 @@ public class Rusher {
    }
    public static void earth() {
       try {
-         long startTime = System.currentTimeMillis();
-         System.out.println("start time = "+startTime);
          int curRound = 1;
       //1st round
          try {
@@ -136,7 +156,9 @@ public class Rusher {
                if(id==primary)
                {
                   Pair p1 = unitPair(primary);
-                  Pair p2 = tasks.get(id).moveTarget;
+                  Pair p2 = enemyInit.get(primaryTarget);
+                  System.out.println("ptarget "+primaryTarget);
+                  System.out.println("ptarget loc "+p2);
                   tasks.get(primary).startMoving(p2);
                   move(id, false);
                   tasks.get(id).stopMoving();
@@ -158,19 +180,14 @@ public class Rusher {
                System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
                updateUnits();
                for(int id: myUnits)
-                  if(id==primary)
+               {
+                  if(tasks.get(id).moveTarget!=null&&move(id, false)==1)
                   {
-                     build(primary, tasks.get(primary).buildID);
+                     tasks.get(id).stopMoving();
+                     tasks.get(id).startMining();
                   }
-                  else
-                  {
-                     if(tasks.get(id).getTask()==0&&move(id, false)==1)
-                     {
-                        tasks.get(id).stopMoving();
-                        tasks.get(id).startMining();
-                     }
-                     tasks.get(id).doTask();
-                  }
+                  tasks.get(id).doTask();
+               }
                gc.nextTurn();
             } catch(Exception e) {e.printStackTrace();}
       //rounds 11-1000
@@ -182,14 +199,19 @@ public class Rusher {
                System.out.println("Earth Round "+gc.round()+": ");
                System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
                updateUnits();
+               for(int id: myUnits)
+               {
+                  if(tasks.get(id).moveTarget!=null&&move(id, false)==1)
+                  {
+                     tasks.get(id).stopMoving();
+                     tasks.get(id).startMining();
+                  }
+                  tasks.get(id).doTask();
+               }
                gc.nextTurn();
-            }
-            catch(Exception e) {
-               e.printStackTrace();
-            }
-            //End turn
-            gc.nextTurn(); 
+            } catch(Exception e) {e.printStackTrace();} 
          }
+         //End of match
       }
       catch(Exception e) {
          e.printStackTrace();
@@ -345,23 +367,26 @@ public class Rusher {
       while(!q.isEmpty())
       {
          id = q.remove();
+         //System.out.println(id);
          if(id.equals(end))
          {
             pathFound = true;
             break;
          }
          for(Direction d: directions)
-            if(!d.equals(Direction.Center))
-               try
+         {
+            try
+            {
+               Pair next = mapPair(eMapLoc[id.x][id.y].add(d));
+               //System.out.println(d+" "+next+" : "+inBounds(next)+" "+avoid(next, avoid)+" ("+next.x+", "+next.y+")");
+               if(inBounds(next)&&avoid(next, avoid)&&dist[next.x][next.y]==-1)
                {
-                  Pair next = mapPair(eMapLoc[id.x][id.y].add(d));
-                  if(inBounds(next)&&avoid(next, avoid)&&dist[next.x][next.y]==-1)
-                  {
-                     dist[next.x][next.y] = dist[id.x][id.y]+1;
-                     prev[next.x][next.y] = id;
-                     q.add(next);
-                  }
-               }catch(Exception e) {e.printStackTrace();}
+                  dist[next.x][next.y] = dist[id.x][id.y]+1;
+                  prev[next.x][next.y] = id;
+                  q.add(next);
+               }
+            }catch(Exception e) {e.printStackTrace();}
+         }
       }   
       if(!pathFound)
          return null;
@@ -386,7 +411,7 @@ public class Rusher {
    }
    public static boolean inBounds(Pair id)
    {
-      return id.x<0||id.x>=eWidth||id.y<0||id.y>=eHeight;
+      return id.x>=0&&id.x<eWidth&&id.y>=0&&id.y<eHeight;
    }
    public static boolean avoid(Pair id, ArrayList<Pair> avoid)
    {
@@ -463,6 +488,10 @@ public class Rusher {
    {
       return mapPair(gc.unit(id).location().mapLocation());
    }
+   public static UnitType unitType(int id)
+   {
+      return gc.unit(id).unitType();
+   }
    static class Path
    {
       Pair start;
@@ -497,9 +526,8 @@ public class Rusher {
    static class Task
    {
    /* 
-      0: moving
-      1: mining
-      2: building
+      0: mining
+      1: building
    */
       int[] typeOn = new int[10]; //lower value is higher priority, 0 means no priority
       int unitID;
@@ -517,35 +545,33 @@ public class Rusher {
          paths[curLoc.x][curLoc.y][target.x][target.y] = findPath(curLoc, target, null);
          if(paths[curLoc.x][curLoc.y][target.x][target.y]==null)
             return false;
-         typeOn[0] = maxStep++;
          moveTarget = target;
          return true;
       }
       public boolean stopMoving()
       {
-         typeOn[0] = 0;
          moveTarget = null;
          return true;
       }
       public boolean startMining()
       {
-         typeOn[1] = maxStep++;
+         typeOn[0] = maxStep++;
          return true;
       }
       public boolean stopMining()
       {
-         typeOn[1] = 0;
+         typeOn[0] = 0;
          return true;
       }
       public boolean startBuilding(int targetID)
       {
-         typeOn[2] = maxStep++;
+         typeOn[1] = maxStep++;
          buildID = targetID;
          return true;
       }
       public boolean stopBuilding(int targetID)
       {
-         typeOn[2] = 0;
+         typeOn[1] = 0;
          buildID = 0;
          return true;
       }
@@ -560,18 +586,18 @@ public class Rusher {
       }
       public int doTask()
       {
+         if(moveTarget!=null)
+            move(unitID, false);
          switch(getTask()) {
             case 0:
-               move(unitID, false);
-               break;
-            case 1:
                mine(unitID);
                break;
-            case 2:
+            case 1:
                build(unitID, buildID);
                break;
             default:
-               break;
+               if(unitType(unitID).equals(UnitType.Worker))
+                  mine(unitID);
          }
          return 0;
       }
@@ -600,6 +626,10 @@ class Pair
       if(p==null)
          return false;
       return x==p.x&&y==p.y;
+   }
+   public String toString()
+   {
+      return x+" "+y;
    }
    static class CompareX implements Comparator<Pair>
    {
