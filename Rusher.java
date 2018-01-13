@@ -14,14 +14,34 @@ public class Rusher {
    static int eHeight = (int) eMap.getHeight();
    static int mWidth = (int) mMap.getWidth();
    static int mHeight = (int) mMap.getHeight();
-   static Team team = gc.team();
+   static Team myTeam = gc.team();
    
    //Unit Info
-   static HashMap<Integer, Unit> idUnits = new HashMap<Integer, Unit>();
+   static HashSet<Integer> myUnits = toIDList(gc.myUnits());
+   static HashSet<Integer> enemyInit = toIDList(gc.units());
+   static HashSet<Integer> myInit = new HashSet<Integer>();
+   static HashSet<Integer>[] ubt = sortUnitTypes(gc.myUnits());
+   static HashSet<Integer> healers = ubt[0];
+   static HashSet<Integer> factories = ubt[1];
+   static HashSet<Integer> knights = ubt[2];
+   static HashSet<Integer> mages = ubt[3];
+   static HashSet<Integer> rangers = ubt[4];
+   static HashSet<Integer> rockets = ubt[5];
+   static HashSet<Integer> workers = ubt[6];
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
-   static HashMap<Integer, MapLocation> unitTarget = new HashMap<Integer, MapLocation>();
    static boolean[][] beingMined = new boolean[eWidth][eHeight];
 
+   static {
+      ArrayList<Integer> toRemove = new ArrayList<Integer>();
+      for(int x: enemyInit)
+         if(myUnits.contains(x))
+         {
+            toRemove.add(x);
+            myInit.add(x);
+         }
+      for(int x: toRemove)
+         enemyInit.remove(x);
+   }
    // Map Info
    static MapLocation[][] eMapLoc = new MapLocation[eWidth][eHeight];
    static long[][] karbDep = new long[eWidth][eHeight];//amount of karbonite in the square
@@ -58,136 +78,102 @@ public class Rusher {
         
         /*End Strategy 2*/
    }
-
-
-
    public static void main(String[] args) {
       if(gc.planet().equals(Planet.Earth))
          earth();
       else
          mars();
    }
-   
-   
    public static void earth() {
       try {
          long startTime = System.currentTimeMillis();
          System.out.println("start time = "+startTime);
          System.out.println("Running Earth Player: ");
          int curRound = 1;
-      //first round
-         System.out.println("Earth Round "+curRound+": ");
-         System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
-         VecUnit initUnits = eMap.getInitial_units();
-         VecUnit myUnits = gc.myUnits();
-         ArrayList<Integer> initID = new ArrayList<Integer>();
-         for(int x = 0; x < idUnits.size(); x++)
-            initID.add(idUnits.get(x).id());
-         Unit primary = null;
-         team = myUnits.get(0).team();
+         int primary = -1;
          boolean enemyConnected = false;
-         init: for(int n = 0; n < myUnits.size(); n++)
-         {
-            primary = myUnits.get(n);
-            for(int targetI = 0; targetI < initUnits.size(); targetI++)
-               if(!initUnits.get(targetI).team().equals(team))
+      //first round
+         try {
+            System.out.println("Earth Round "+curRound+": ");
+            System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
+            for(int x: myInit)
+               tasks.put(x, new Task(x));
+            init: for(int start: myUnits)
+            {
+               primary = start;
+               for(int target: enemyInit)
                {
-                  MapLocation m1 = primary.location().mapLocation();
-                  MapLocation m2 = initUnits.get(targetI).location().mapLocation();
+                  MapLocation m1 = gc.unit(start).location().mapLocation();
+                  MapLocation m2 = gc.unit(target).location().mapLocation();
                   Pair p1 = mapID(m1);
                   Pair p2 = mapID(m2);
                   paths[p1.x][p1.y][p2.x][p2.y] = findPath(m1, m2, new ArrayList<MapLocation>());
                   if(paths[p1.x][p1.y][p2.x][p2.y]!=null)
                   {   
-                     unitTarget.put(primary.id(), m2);
+                     Task t = new Task(primary);
+                     t.targetLoc = m2;
+                     tasks.get(primary).typeOn[0] = true;
+                     tasks.get(primary).targetLoc = m2;
                      move(primary, true);
-                     unitTarget.remove(primary.id());
-                     gc.blueprint(primary.id(), UnitType.Factory, oppositeDirection(paths[p1.x][p1.y][p2.x][p2.y].seq.get(0)));
+                     tasks.get(primary).typeOn[0] = false;
+                     tasks.get(primary).targetLoc = null;
+                     t.buildID = blueprint(primary, UnitType.Factory, oppositeDirection(paths[p1.x][p1.y][p2.x][p2.y].seq.get(0)));
                      enemyConnected = true;
                      break init;
                   }
                }
-         }
-         ArrayList<KarbAdjacent>[] bestKarbAdj = new ArrayList[(int)myUnits.size()];
-         //finds the highest karbAdj locations for each starting unit
-         for(int x = 0; x < myUnits.size(); x++)
-         {
-            bestKarbAdj[x] = countMaxKarbAdj(myUnits.get(x).location().mapLocation());
-            if(!myUnits.get(x).equals(primary))
-            {
-               unitTarget.put(myUnits.get(x).id(), bestKarbAdj[x].get(0).ml);
-               bestKarbAdj[x].remove(0);
-               move(myUnits.get(x), true);
             }
-         }
-         curRound++;
-         gc.nextTurn();
+            HashMap<Integer, PriorityQueue<KarbAdjacent>> bestKarbAdj = new HashMap<Integer, PriorityQueue<KarbAdjacent>>();;
+         //finds the highest karbAdj locations for each starting unit
+            for(int id: myUnits)
+            {
+               bestKarbAdj.put(id, countMaxKarbAdj(gc.unit(id).location().mapLocation()));
+               if(id!=primary)
+               {
+                  tasks.get(id).typeOn[0] = true;
+                  tasks.get(id).targetLoc = bestKarbAdj.get(id).remove().loc;
+                  move(id, false);
+               }
+            }
+            curRound++;
+            gc.nextTurn();
+         } catch(Exception e) {e.printStackTrace();}
       //end of first round
          for(; curRound <= 10; curRound++)
          {
             System.out.println("Earth Round "+curRound+": ");
             System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
-            ArrayList<Unit>[] ubt = sortUnitTypes(myUnits);
-            ArrayList<Unit> healers = ubt[0];
-            ArrayList<Unit> factories = ubt[1];
-            ArrayList<Unit> knights = ubt[2];
-            ArrayList<Unit> mages = ubt[3];
-            ArrayList<Unit> rangers = ubt[4];
-            ArrayList<Unit> rockets = ubt[5];
-            ArrayList<Unit> workers = ubt[6];
-            for(int x = 0; x < myUnits.size(); x++)
-               if(myUnits.get(x).equals(primary))
-                  gc.build(primary.id(), factories.get(0).id());
+            updateUnits();
+            for(int id: myUnits)
+               if(id==primary)
+               {
+                  build(primary, tasks.get(primary).buildID);
+               }
                else
                {
-                  boolean arrived = move(myUnits.get(x), true);
-                  if(arrived)
+                  int arrived = move(id, false);
+                  if(arrived==1)
                   {
-                     mine(myUnits.get(x));
+                     mine(id);
                   }
                }
             gc.nextTurn();
          }
-         if(enemyConnected)
-            for(; curRound <= maxRound; curRound++)
-            {
-            //try-catch is used for everything since if we have an uncaught exception, we lose
-               try
-               {
-                  System.out.println("Earth Round "+curRound+": ");
-                  System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
-                  myUnits = gc.myUnits();
-                  ArrayList<Unit>[] ubt = sortUnitTypes(myUnits); //units by type
-                  ArrayList<Unit> healers = ubt[0];
-                  ArrayList<Unit> factories = ubt[1];
-                  ArrayList<Unit> knights = ubt[2];
-                  ArrayList<Unit> mages = ubt[3];
-                  ArrayList<Unit> rangers = ubt[4];
-                  ArrayList<Unit> rockets = ubt[5];
-                  ArrayList<Unit> workers = ubt[6];
-                  for(int x = 0; x < myUnits.size(); x++)
-                     if(myUnits.get(x).equals(primary))
-                        gc.build(primary.id(), factories.get(0).id());
-                     else
-                     {
-                        boolean arrived = move(myUnits.get(x), true);
-                        if(arrived)
-                           mine(myUnits.get(x));
-                     }
-                  gc.nextTurn();
-               }
-               catch(Exception e) {
-                  e.printStackTrace();
-               }
-            //End turn
-               gc.nextTurn(); 
-            }    
-         else
+         for(; curRound <= maxRound; curRound++)
          {
-            for(int x = 0; x < initID.size(); x++)
+            //try-catch is used for everything since if we have an uncaught exception, we lose
+            try
             {
-            
+               System.out.println("Earth Round "+curRound+": ");
+               System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
+               updateUnits();
+               gc.nextTurn();
             }
+            catch(Exception e) {
+               e.printStackTrace();
+            }
+            //End turn
+            gc.nextTurn(); 
          }
       }
       catch(Exception e) {
@@ -199,8 +185,36 @@ public class Rusher {
       System.out.println("Mars Stuffs");
       
    }
-   public static boolean mine(Unit u)
+   //worker id, structure id, -1 means cannot build, 0 means build success, 1 means structure is finished
+   public static int build(int wID, int sID) 
    {
+      if(!gc.canBuild(wID,sID))
+         return -1;
+      gc.build(wID, sID);
+      if(gc.unit(sID).structureIsBuilt()!=0)
+         return 1;
+      else 
+         return 0;
+   }
+   public static int blueprint(int id, UnitType ut, Direction d)
+   {
+      Unit u = gc.unit(id);
+      HashSet<Integer> prevFact = factories;
+      if(gc.canBlueprint(id, ut, d))
+         gc.blueprint(id, ut, d);
+      else
+         return -1;
+      int blueID = -2;
+      for(int x: factories)
+         if(!prevFact.contains(x))
+            blueID = x;
+      if(blueID==-2)
+         System.out.println("Blueprint method error");
+      return blueID;
+   }
+   public static boolean mine(int id)
+   {
+      Unit u = gc.unit(id);
       Pair p = mapID(u.location().mapLocation());
       int xPos = p.x;
       int yPos = p.y;
@@ -222,53 +236,65 @@ public class Rusher {
       }
       return false;
    }
-   public static boolean move(Unit u, boolean ignoreEnemy)
+   //return -1 means path blocked, 0 means move success, 1 means reached target
+   public static int move(int id, boolean engage) 
    {
-      int id = u.id();
-      if(unitTarget.get(id)==null)
-         return false;
+      Unit u = gc.unit(id);
       Pair prev = mapID(u.location().mapLocation());
-      Pair target = mapID(unitTarget.get(id));
+      Pair target = mapID(tasks.get(id).targetLoc);
       if(prev.equals(target))
       {
-         unitTarget.remove(id);
-         return true;
+         tasks.get(id).targetLoc = null;
+         return 1;
       }
-      if(ignoreEnemy)
-      {
-         gc.moveRobot(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0));
-         Pair p = mapID(u.location().mapLocation());
-         paths[p.x][p.y][target.x][target.y] = paths[prev.x][prev.y][target.x][target.y].copy();
-         paths[p.x][p.y][target.x][target.y].start = u.location().mapLocation();
-         paths[p.x][p.y][target.x][target.y].seq.remove(0);
-      }
-      else
-      {
-      
-      }
-      return false;
+      if(gc.canMove(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0)))
+         if(engage)
+         {
+         }
+         else
+         {
+            gc.moveRobot(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0));
+            Pair p = mapID(u.location().mapLocation());
+            paths[p.x][p.y][target.x][target.y] = paths[prev.x][prev.y][target.x][target.y].copy();
+            paths[p.x][p.y][target.x][target.y].start = u.location().mapLocation();
+            paths[p.x][p.y][target.x][target.y].seq.remove(0);
+            return 0;
+         }
+      return 0;
    }
-   public static ArrayList<Unit>[] sortUnitTypes(VecUnit units) {
-      ArrayList<Unit>[] unitsByType = new ArrayList[7];
+   public static void updateUnits()
+   {
+      myUnits = toIDList(gc.myUnits());
+      ubt = sortUnitTypes(gc.myUnits());
+      healers = ubt[0];
+      factories = ubt[1];
+      knights = ubt[2];
+      mages = ubt[3];
+      rangers = ubt[4];
+      rockets = ubt[5];
+      workers = ubt[6];
+   }
+   public static HashSet<Integer>[] sortUnitTypes(VecUnit units) {
+      HashSet<Integer>[] unitsByType = new HashSet[7];
       for(int x = 0; x < 7; x++)
-         unitsByType[x] = new ArrayList<Unit>();
+         unitsByType[x] = new HashSet<Integer>();
       for(int x = 0; x < units.size(); x++)
       {
          UnitType ut = units.get(x).unitType();
          if(ut.equals(UnitType.Factory))
-            unitsByType[0].add(units.get(x));
+            unitsByType[0].add(units.get(x).id());
          else if(ut.equals(UnitType.Healer))
-            unitsByType[1].add(units.get(x));
+            unitsByType[1].add(units.get(x).id());
          else if(ut.equals(UnitType.Knight))
-            unitsByType[2].add(units.get(x));
+            unitsByType[2].add(units.get(x).id());
          else if(ut.equals(UnitType.Mage))
-            unitsByType[3].add(units.get(x));
+            unitsByType[3].add(units.get(x).id());
          else if(ut.equals(UnitType.Ranger))
-            unitsByType[4].add(units.get(x));
+            unitsByType[4].add(units.get(x).id());
          else if(ut.equals(UnitType.Rocket))
-            unitsByType[5].add(units.get(x));
+            unitsByType[5].add(units.get(x).id());
          else if(ut.equals(UnitType.Worker))
-            unitsByType[6].add(units.get(x));
+            unitsByType[6].add(units.get(x).id());
          else
             System.out.println("Error, Unknown unit type: "+ut);
       }
@@ -311,7 +337,7 @@ public class Rusher {
                try
                {
                   Pair next = mapID(eMapLoc[id.x][id.y].add(d));
-                  if(checkAvoid(next, avoid)&&dist[next.x][next.y]==-1)
+                  if(inBounds(next)&&avoid(next, avoid)&&dist[next.x][next.y]==-1)
                   {
                      dist[next.x][next.y] = dist[id.x][id.y]+1;
                      prev[next.x][next.y] = id;
@@ -329,10 +355,23 @@ public class Rusher {
       }
       return p;
    }
-   public static boolean checkAvoid(Pair id, ArrayList<MapLocation> avoid)
+   public static HashSet<Integer> toIDList(VecUnit vu)
    {
-      if(id.x<0||id.x>=eWidth||id.y<0||id.y>=eHeight)
-         return false;
+      HashSet<Integer> ret = new HashSet<Integer>();
+      for(int x = 0; x < vu.size(); x++)
+         ret.add(vu.get(x).id());
+      return ret;
+   }
+   public static boolean isEmpty(Pair id)
+   {
+      return gc.hasUnitAtLocation(eMapLoc[id.x][id.y])&&passable[id.x][id.y];
+   }
+   public static boolean inBounds(Pair id)
+   {
+      return id.x<0||id.x>=eWidth||id.y<0||id.y>=eHeight;
+   }
+   public static boolean avoid(Pair id, ArrayList<MapLocation> avoid)
+   {
       if(avoid!=null)
          for(int a = 0; a < avoid.size(); a++)
             if(mapID(avoid.get(a)).equals(id))
@@ -375,10 +414,10 @@ public class Rusher {
       return karbCount;
    }
    //floodfills region and returns a ArrayList containing locations with highest karbAdj value
-   public static ArrayList<KarbAdjacent> countMaxKarbAdj(MapLocation m)
+   public static PriorityQueue<KarbAdjacent> countMaxKarbAdj(MapLocation m)
    {
       boolean[][] used = new boolean[eWidth][eHeight];
-      ArrayList<KarbAdjacent> karbAdjOrder = new ArrayList<KarbAdjacent>();
+      PriorityQueue<KarbAdjacent> karbAdjOrder = new PriorityQueue<KarbAdjacent>();
       LinkedList<Pair> q = new LinkedList<Pair>();
       used[mapID(m).x][mapID(m).y] = true;
       q.add(mapID(m));
@@ -389,14 +428,13 @@ public class Rusher {
          for(Direction d: directions)
             try{
                Pair next = mapID(eMapLoc[id.x][id.y].add(d));   
-               if(checkAvoid(next, null))
+               if(inBounds(next))
                {
                   used[next.x][next.y] = true;
                   q.add(next);
                }
             } catch(Exception e) {e.printStackTrace();}
       }
-      Collections.sort(karbAdjOrder);
       return karbAdjOrder;
    }
    public static Pair mapID(MapLocation m)
@@ -424,12 +462,12 @@ public class Rusher {
    }
    static class KarbAdjacent implements Comparable<KarbAdjacent> {
       Pair id;
-      MapLocation ml;
+      MapLocation loc;
       int dep;
    
       public KarbAdjacent(Pair p, int d) {
          id = p;
-         ml = eMapLoc[id.x][id.y];
+         loc = eMapLoc[id.x][id.y];
          dep = d;
       }
    // greatest goes first
@@ -443,15 +481,14 @@ public class Rusher {
    /* 
       0: moving
       1: mining
-      2: blueprinting
-      3: building
+      2: building
    */
-      int taskID; 
-      int buildID;
-      public Task(int id, int task)
+      boolean[] typeOn = new boolean[10]; //if the robot is doing task "x"
+      int buildID; //for building
+      MapLocation targetLoc; //for moving
+      public Task(int id)
       {
          unitID = id;
-         taskID = task;
       }
    }
 }
