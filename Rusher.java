@@ -31,6 +31,7 @@ public class Rusher {
    static HashSet<Integer> workers = ubt[6];
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
    static boolean[][] beingMined = new boolean[eWidth][eHeight];
+   
    // Map Info
    static MapLocation[][] eMapLoc = new MapLocation[eWidth][eHeight];
    static long[][] karbDep = new long[eWidth][eHeight];//amount of karbonite in the square
@@ -49,65 +50,62 @@ public class Rusher {
       
    static {
       try {
+      //initializes enemyInit and myInit
          ArrayList<Integer> toRemove = new ArrayList<Integer>();
          for(int x: enemyInit)
-            if(myUnits.contains(x))
-            {
-               toRemove.add(x);
-               myInit.add(x);
-            }
+            try {
+               if(myUnits.contains(x))
+               {
+                  toRemove.add(x);
+                  myInit.add(x);
+               }
+            } catch(Exception e) {e.printStackTrace();}
          for(int x: toRemove)
-            enemyInit.remove(x);
+            try {
+               enemyInit.remove(x);
+            } catch(Exception e) {e.printStackTrace();}
+      //initializes tasks
+         System.out.println("Start tasks");
          for(int x: myInit)
-            tasks.put(x, new Task(x));
-         
-         for(int i = 0; i < eWidth; i++) {
-            for(int j = 0; j < eHeight; j++) {
-               eMapLoc[i][j] = new MapLocation(earth,i,j);
-               karbDep[i][j] = eMap.initialKarboniteAt(eMapLoc[i][j]);
-               passable[i][j] = eMap.isPassableTerrainAt(eMapLoc[i][j])==0;
-            }
-         }
+            try {
+               tasks.put(x, new Task(x));
+            } catch(Exception e) {e.printStackTrace();}
+         System.out.println("end tasks");
+      //initializes eMapLoc, karbDep, and passable
+         for(int x = 0; x < eWidth; x++)
+            for(int y = 0; y < eHeight; y++) 
+               try {
+                  eMapLoc[x][y] = new MapLocation(earth,x,y);
+                  karbDep[x][y] = eMap.initialKarboniteAt(eMapLoc[x][y]);
+                  passable[x][y] = eMap.isPassableTerrainAt(eMapLoc[x][y])!=0;
+               } catch(Exception e) {e.printStackTrace();}
+      //initializes karbAdj
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
-               karbAdj[x][y] = countKarbAdj(x,y);
-            
+               try {
+                  karbAdj[x][y] = countKarbAdj(x,y);
+               } catch(Exception e) {e.printStackTrace();}
+      //initializes primary
          init: for(int start: myUnits)
          {
             primary = start;
             for(int target: enemyInit)
             {
-               Pair p1 = mapPair(gc.unit(start).location().mapLocation());
-               Pair p2 = mapPair(gc.unit(target).location().mapLocation());
-               paths[p1.x][p1.y][p2.x][p2.y] = findPath(p1, p2, new ArrayList<MapLocation>());
+               Pair p1 = unitPair(start);
+               Pair p2 = unitPair(target);
+               paths[p1.x][p1.y][p2.x][p2.y] = findPath(p1, p2, null);
                if(paths[p1.x][p1.y][p2.x][p2.y]!=null)
                {   
-                  Task t = new Task(primary);
-                  t.moveTarget = p2;
-                  tasks.get(primary).typeOn[0] = true;
-                  tasks.get(primary).moveTarget = p2;
-                  move(primary, true);
-                  tasks.get(primary).typeOn[0] = false;
-                  tasks.get(primary).moveTarget = null;
-                  t.buildID = blueprint(primary, UnitType.Factory, oppositeDirection(paths[p1.x][p1.y][p2.x][p2.y].seq.get(0)));
                   enemyConnected = true;
                   break init;
                }
             }
          }
-         //finds the highest karbAdj locations for each starting unit
+      //initializes bestKarbAdj and assigns first tasks
          for(int id: myUnits)
-         {
-            bestKarbAdj.put(id, countMaxKarbAdj(gc.unit(id).location().mapLocation()));
-            if(id!=primary)
-            {
-               tasks.get(id).typeOn[0] = true;
-               tasks.get(id).moveTarget = bestKarbAdj.get(id).remove().loc;
-               move(id, false);
-            }
-         }
-        
+            bestKarbAdj.put(id, countMaxKarbAdj(unitPair(id)));
       //Research
+      
          gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
          gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
          gc.queueResearch(UnitType.Ranger);  // 100 Rounds - "Scopes"
@@ -130,17 +128,33 @@ public class Rusher {
          long startTime = System.currentTimeMillis();
          System.out.println("start time = "+startTime);
          int curRound = 1;
-      //first round
+      //1st round
          try {
-            System.out.println("Earth Round "+curRound+": ");
+            System.out.println("Earth Round "+gc.round()+": ");
             System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
+            for(int id: myUnits)
+               if(id==primary)
+               {
+                  Pair p1 = unitPair(primary);
+                  Pair p2 = tasks.get(id).moveTarget;
+                  tasks.get(primary).startMoving(p2);
+                  move(id, false);
+                  tasks.get(id).stopMoving();
+                  int buildID = blueprint(primary, UnitType.Factory, oppositeDirection(paths[p1.x][p1.y][p2.x][p2.y].seq.get(0)));
+                  tasks.get(id).startBuilding(buildID);
+               }
+               else
+               {
+                  tasks.get(id).startMoving(bestKarbAdj.get(id).remove().loc);
+                  move(id, false);
+               }
             curRound++;
             gc.nextTurn();
          } catch(Exception e) {e.printStackTrace();}
-      //end of first round
+      //rounds 2-10
          while(gc.round()<=10)
             try {
-               System.out.println("Earth Round "+curRound+": ");
+               System.out.println("Earth Round "+gc.round()+": ");
                System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
                updateUnits();
                for(int id: myUnits)
@@ -150,20 +164,22 @@ public class Rusher {
                   }
                   else
                   {
-                     int arrived = move(id, false);
-                     if(arrived==1)
+                     if(tasks.get(id).getTask()==0&&move(id, false)==1)
                      {
-                        mine(id);
+                        tasks.get(id).stopMoving();
+                        tasks.get(id).startMining();
                      }
+                     tasks.get(id).doTask();
                   }
                gc.nextTurn();
             } catch(Exception e) {e.printStackTrace();}
+      //rounds 11-1000
          while(gc.round()<=maxRound)
          {
             //try-catch is used for everything since if we have an uncaught exception, we lose
             try
             {
-               System.out.println("Earth Round "+curRound+": ");
+               System.out.println("Earth Round "+gc.round()+": ");
                System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
                updateUnits();
                gc.nextTurn();
@@ -181,8 +197,11 @@ public class Rusher {
    }
    public static void mars() {
       // Do Something
-      System.out.println("Mars Stuffs");
-      
+      while(gc.round()<=maxRound)
+      {
+         System.out.println("Mars Round: "+gc.round());
+         gc.nextTurn();
+      }
    }
    //worker id, structure id, -1 means cannot build, 0 means build success, 1 means structure is finished
    public static int build(int wID, int sID) 
@@ -239,7 +258,7 @@ public class Rusher {
    public static int move(int id, boolean engage) 
    {
       Unit u = gc.unit(id);
-      Pair prev = mapPair(u.location().mapLocation());
+      Pair prev = unitPair(id);
       Pair target = tasks.get(id).moveTarget;
       if(prev.equals(target))
       {
@@ -253,10 +272,10 @@ public class Rusher {
          else
          {
             gc.moveRobot(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0));
-            Pair p = mapPair(u.location().mapLocation());
+            Pair p = unitPair(id);
             paths[p.x][p.y][target.x][target.y] = paths[prev.x][prev.y][target.x][target.y].copy();
             paths[p.x][p.y][target.x][target.y].start = mapPair(u.location().mapLocation());
-            paths[p.x][p.y][target.x][target.y].seq.remove(0);
+            paths[p.x][p.y][target.x][target.y].seq.remove();
             return 0;
          }
       return 0;
@@ -310,8 +329,10 @@ public class Rusher {
                   count++;
       return count;
    }
-   public static Path findPath(Pair start, Pair end, ArrayList<MapLocation> avoid)
+   public static Path findPath(Pair start, Pair end, ArrayList<Pair> avoid)
    {
+      if(paths[start.x][start.y][end.x][end.y]!=null)
+         return paths[start.x][start.y][end.x][end.y];
       int[][] dist = new int[eWidth][eHeight];
       Pair[][] prev = new Pair[eWidth][eHeight];
       for(int x = 0; x < dist.length; x++)
@@ -367,11 +388,11 @@ public class Rusher {
    {
       return id.x<0||id.x>=eWidth||id.y<0||id.y>=eHeight;
    }
-   public static boolean avoid(Pair id, ArrayList<MapLocation> avoid)
+   public static boolean avoid(Pair id, ArrayList<Pair> avoid)
    {
       if(avoid!=null)
-         for(int a = 0; a < avoid.size(); a++)
-            if(mapPair(avoid.get(a)).equals(id))
+         for(Pair a: avoid)
+            if(a.equals(id))
                return false;
       return true;
    }
@@ -411,13 +432,13 @@ public class Rusher {
       return karbCount;
    }
    //floodfills region and returns a ArrayList containing locations with highest karbAdj value
-   public static PriorityQueue<KarbAdjacent> countMaxKarbAdj(MapLocation m)
+   public static PriorityQueue<KarbAdjacent> countMaxKarbAdj(Pair p)
    {
       boolean[][] used = new boolean[eWidth][eHeight];
       PriorityQueue<KarbAdjacent> karbAdjOrder = new PriorityQueue<KarbAdjacent>();
       LinkedList<Pair> q = new LinkedList<Pair>();
-      used[mapPair(m).x][mapPair(m).y] = true;
-      q.add(mapPair(m));
+      used[p.x][p.y] = true;
+      q.add(p);
       while(!q.isEmpty())
       {
          Pair id = q.remove();
@@ -438,22 +459,25 @@ public class Rusher {
    {
       return new Pair(m.getX(),m.getY());
    }
+   public static Pair unitPair(int id)
+   {
+      return mapPair(gc.unit(id).location().mapLocation());
+   }
    static class Path
    {
       Pair start;
       Pair end;
-      ArrayList<Direction> seq;
+      LinkedList<Direction> seq = new LinkedList<Direction>();
       public Path(Pair s, Pair e)
       {
          start = s;
          end = e;
-         seq = new ArrayList<Direction>();
       }
       public Path copy()
       {
          Path p = new Path(start, end);
-         for(int x = 0; x < seq.size(); x++)
-            p.seq.add(seq.get(x));
+         for(Direction d: seq)
+            p.seq.add(d);
          return p;
       }
    }
@@ -472,18 +496,93 @@ public class Rusher {
    }
    static class Task
    {
-      int unitID;
    /* 
       0: moving
       1: mining
       2: building
    */
-      boolean[] typeOn = new boolean[10]; //if the robot is doing task "x"
+      int[] typeOn = new int[10]; //lower value is higher priority, 0 means no priority
+      int unitID;
+      int maxStep = 1;
+   //task-specific data (if taks is off, then value is null, false, -1, etc)
       int buildID; //for building: target blueprint
       Pair moveTarget; //for moving: final destination
       public Task(int id)
       {
          unitID = id;
+      }
+      public boolean startMoving(Pair target)
+      {
+         Pair curLoc = unitPair(unitID);
+         paths[curLoc.x][curLoc.y][target.x][target.y] = findPath(curLoc, target, null);
+         if(paths[curLoc.x][curLoc.y][target.x][target.y]==null)
+            return false;
+         typeOn[0] = maxStep++;
+         moveTarget = target;
+         return true;
+      }
+      public boolean stopMoving()
+      {
+         typeOn[0] = 0;
+         moveTarget = null;
+         return true;
+      }
+      public boolean startMining()
+      {
+         typeOn[1] = maxStep++;
+         return true;
+      }
+      public boolean stopMining()
+      {
+         typeOn[1] = 0;
+         return true;
+      }
+      public boolean startBuilding(int targetID)
+      {
+         typeOn[2] = maxStep++;
+         buildID = targetID;
+         return true;
+      }
+      public boolean stopBuilding(int targetID)
+      {
+         typeOn[2] = 0;
+         buildID = 0;
+         return true;
+      }
+      public int getTask()
+      {
+         int index = -1;
+         for(int x = 1; x < typeOn.length; x++)
+            if(typeOn[x]>0)
+               if(index==-1||typeOn[x]<typeOn[index])
+                  index = x;
+         return index;
+      }
+      public int doTask()
+      {
+         switch(getTask()) {
+            case 0:
+               move(unitID, false);
+               break;
+            case 1:
+               mine(unitID);
+               break;
+            case 2:
+               build(unitID, buildID);
+               break;
+            default:
+               break;
+         }
+         return 0;
+      }
+   }
+   static class Connection
+   {
+      HashSet<Integer> myInit = new HashSet<Integer>();
+      HashSet<Integer> enemyInit = new HashSet<Integer>();
+      boolean[][] contains = new boolean[eWidth][eHeight];
+      public Connection()
+      {
       }
    }
 }
@@ -498,6 +597,8 @@ class Pair
    }
    public boolean equals(Pair p)
    {
+      if(p==null)
+         return false;
       return x==p.x&&y==p.y;
    }
    static class CompareX implements Comparator<Pair>
