@@ -193,7 +193,6 @@ public class Rusher {
            
             for(int id: workers)
             {
-               System.out.println("Worker "+id);
                if(tasks.get(id).getTask()==-1)
                {
                   int type = tasks.get(id).taskType;
@@ -210,6 +209,7 @@ public class Rusher {
                int val = tasks.get(id).doTask();
                if(task==0&&val==-1)
                {
+                  System.out.println("finished mining");
                   tasks.get(id).startMoving(bestKarbAdj.get(id).remove().loc);
                }
                if(task==1&&val==-2)
@@ -221,14 +221,12 @@ public class Rusher {
             }
             for(int id: factories)
             {
-               System.out.println("Factory "+id);
                if(tasks.get(id).getTask()==-1)
                   tasks.get(id).startProducing(UnitType.Ranger);
                tasks.get(id).doTask();
             }
             for(int id: rangers)
             {
-               System.out.println("Ranger "+id);
                if(tasks.get(id).getTask()==-1)
                {
                   int n = (int)(Math.random()*enemyInit.size());
@@ -268,6 +266,8 @@ public class Rusher {
             return -2;
          for(int targetEnemy: enemy)
          {
+            if(!gc.canAttack(id, targetEnemy))
+               continue;
             gc.attack(id, targetEnemy);
             return 0;
          }
@@ -322,11 +322,13 @@ public class Rusher {
       for(Direction d: directions)
          try
          {
-            if(gc.karboniteAt(eMapLoc[p.x][p.y].add(d))>max)
-            {
-               best = d;
-               max = (int)gc.karboniteAt(eMapLoc[p.x][p.y].add(d));
-            }
+            MapLocation loc = eMapLoc[p.x][p.y].add(d);
+            if(inBounds(mapPair(loc)))
+               if(gc.karboniteAt(loc)>max)
+               {
+                  best = d;
+                  max = (int)gc.karboniteAt(eMapLoc[p.x][p.y].add(d));
+               }
          }catch(Exception e) {e.printStackTrace();}
       if(max==0)
          return -1;
@@ -702,15 +704,9 @@ public class Rusher {
       public int doTask()
       {
          int ret = 0;
-         if(moveTarget!=null)
-         {
-            int i = move(unitID, false);
-            if(i==1)
-               moveTarget=null;
-         }
          switch(getTask()) {
             case 0:
-               if(mine(unitID)==0)
+               if(mine(unitID)==-1)
                   ret = -1;
                break;
             case 1:
@@ -766,6 +762,12 @@ public class Rusher {
             default:
                if(unitType(unitID).equals(UnitType.Worker))
                   mine(unitID);
+         }
+         if(moveTarget!=null)
+         {
+            int i = move(unitID, false);
+            if(i==1)
+               moveTarget=null;
          }
          return 0;
       }
