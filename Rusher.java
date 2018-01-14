@@ -1,8 +1,10 @@
 import bc.*;
 import java.util.*;
+import java.io.*;
 @SuppressWarnings("unchecked")
 public class Rusher {
    //Basic Info 
+   static PrintWriter out;
    static long startTime = System.currentTimeMillis();
    static int maxRound = 1000;   // the number of rounds
    static Planet earth = Planet.Earth;
@@ -29,8 +31,6 @@ public class Rusher {
    static HashSet<Integer> rockets;
    static HashSet<Integer> workers;
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
-   static boolean[][] beingMined = new boolean[eWidth][eHeight];
-   
    static HashMap<Integer, Pair> enemyInit = new HashMap<Integer, Pair>();
    static HashSet<Integer> enemyUnits;
    
@@ -42,9 +42,13 @@ public class Rusher {
    static HashMap<Integer, PriorityQueue<KarbAdjacent>> bestKarbAdj = new HashMap<Integer, PriorityQueue<KarbAdjacent>>();
    static int[][] regions = new int[eWidth][eHeight];
    static int regionCount = 0;
+   static boolean[][] availableMine = new boolean[eWidth][eHeight];
       
    static {
       try {
+      //log file
+         out = new PrintWriter(new File(myTeam+"_"+gc.planet()+"log.txt"));
+      
       //Research
          System.out.println("Queueing research");
          gc.queueResearch(UnitType.Ranger);  // 25 Rounds - "Get in Fast"
@@ -63,6 +67,10 @@ public class Rusher {
             enemyTeam = Team.Blue;
          else
             enemyTeam = Team.Red;
+      
+      //initializes availableMine
+         for(int x = 0; x < eWidth; x++)
+            Arrays.fill(availableMine[x], true);
             
       //update units
          updateUnits();
@@ -99,7 +107,7 @@ public class Rusher {
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
                try {
-                  karbAdj[x][y] = countKarbAdj(x,y);
+                  karbAdj[x][y] = countKarbAdj(new Pair(x, y), false);
                } 
                catch(Exception e) {e.printStackTrace();}
          System.out.println("Finished finding karbonite sums");
@@ -151,11 +159,9 @@ public class Rusher {
             Pair p = unitPair(id);
             tasks.get(id).taskType = 0;
             System.out.println(bestKarbAdj.get(regions[p.x][p.y]).size());
-            if(bestKarbAdj.get(regions[p.x][p.y]).size()>0)
-            { 
-               tasks.get(id).startMining(bestKarbAdj.get(regions[p.x][p.y]).remove().loc);
-               System.out.println("Unit "+id+"'s mining target is "+tasks.get(id).moveTarget);
-            }
+            KarbAdjacent best = bestMine(id);
+            if(best!=null)
+               tasks.get(id).startMining(best.loc);
          }
       //end of first round
          
@@ -168,6 +174,7 @@ public class Rusher {
          earth();
       else
          mars();
+      out.close();
    }
    public static void earth() {
       //rounds 1-1000
@@ -186,12 +193,11 @@ public class Rusher {
                if(task!=tasks.get(id).getTask())
                {
                   Pair p = unitPair(id);
-                  System.out.println("Unit "+id+" finished mining at "+p);
                   System.out.println(bestKarbAdj.get(regions[p.x][p.y]).size()+" regions left");
-                  if(bestKarbAdj.get(regions[p.x][p.y]).size()>0)
-                  {
-                     tasks.get(id).startMining(bestKarbAdj.get(regions[p.x][p.y]).remove().loc);
-                     System.out.println("Unit "+id+" is moving to "+tasks.get(id).moveTarget);
+                  KarbAdjacent best = bestMine(id);
+                  if(best!=null)
+                  { 
+                     tasks.get(id).startMining(best.loc);
                   }
                }
                if(task==1&&val==-2)
@@ -225,6 +231,16 @@ public class Rusher {
             }
          } 
          catch(Exception e) {e.printStackTrace();} 
+         if(gc.round()>=105)
+         {
+            out.println("Round "+gc.round());
+            for(int id: workers)
+            {
+               out.println();
+               out.println(workers);
+            }
+            out.println("-----");
+         }
          gc.nextTurn();
       }
          //End of match
@@ -259,6 +275,9 @@ public class Rusher {
          }
       }
       return -1;
+            //HashSet<Integer> enemy = toIDList(gc.senseNearbyUnitsByTeam(gc.unit(id).location().mapLocation(), (int) gc.unit(id).attackRange(), enemyTeam));
+            // if(engage&&enemy.size()>0)
+               // return -3;
    }
    //-2 means not enough resources, -1 means factory is busy, 0 means success
    public static int produce(int id, UnitType ut) //factory ID, type of unit to be made
@@ -323,32 +342,51 @@ public class Rusher {
       return 0;
    }
    //return -3 means enemy spotted, -2 means path blocked, -1 means too much heat, 0 means move success, 1 means reached target
-   public static int move(int id, boolean engage) 
+   public static int move(int id) throws Exception
    {
       Unit u = gc.unit(id);
       Pair prev = unitPair(id);
       Pair target = tasks.get(id).moveTarget;
+      if(availableMine[prev.x][prev.y]&&countKarbAdj(unitPair(id), true)==0)
+         availableMine[prev.x][prev.y] = false;
       if(prev.equals(target))
-      {
-         tasks.get(id).moveTarget = null;
          return 1;
-      }
-      if(gc.canMove(id, paths[prev.x][prev.y][target.x][target.y].seq.getFirst()))
+         
+      Path pa = paths[prev.x][prev.y][target.x][target.y];
+      if(tasks.get(id).detour!=null)
+         pa = tasks.get(id).detour;
+      if(gc.canMove(id, pa.seq.getFirst()))
          if(gc.isMoveReady(id))
          {
-            //HashSet<Integer> enemy = toIDList(gc.senseNearbyUnitsByTeam(gc.unit(id).location().mapLocation(), (int) gc.unit(id).attackRange(), enemyTeam));
-            // if(engage&&enemy.size()>0)
-               // return -3;
-            gc.moveRobot(id, paths[prev.x][prev.y][target.x][target.y].seq.get(0));
+            gc.moveRobot(id, pa.seq.get(0));
             Pair p = unitPair(id);
-            paths[p.x][p.y][target.x][target.y] = paths[prev.x][prev.y][target.x][target.y].copy();
+            paths[p.x][p.y][target.x][target.y] = pa.copy();
             paths[p.x][p.y][target.x][target.y].seq.removeFirst();
             return 0;
          }
          else
             return -1;
       else
-         return -2;
+      {
+         Unit block = gc.senseUnitAtLocation(eMapLoc[prev.x][prev.y].add(pa.seq.get(0)));
+         if(block.team().equals(enemyTeam)||block.unitType().equals(UnitType.Factory))
+            if(tasks.get(id).setDetour(unitPair(block.id())))
+            {
+               pa = tasks.get(id).detour;
+               if(gc.canMove(id, pa.seq.getFirst()))
+                  if(gc.isMoveReady(id))
+                  {
+                     gc.moveRobot(id, pa.seq.get(0));
+                     pa.seq.removeFirst();
+                     return 0;
+                  }
+                  else
+                     return -1;
+            }
+            else
+               return -2;
+      }
+      return 0;
    }
    public static void updateUnits() throws Exception
    {
@@ -398,7 +436,7 @@ public class Rusher {
                   count++;
       return count;
    }
-   public static Path findPath(Pair start, Pair end, ArrayList<Pair> avoid) throws Exception
+   public static Path findPath(Pair start, Pair end, Pair avoid) throws Exception
    {
       if(regions[start.x][start.y]!=regions[start.x][start.y])
          throw new Exception("Different regions");
@@ -427,12 +465,8 @@ public class Rusher {
             try
             {
                Pair next = mapPair(eMapLoc[id.x][id.y].add(d));
-               if(gc.round()==19)
-               {
-                  if(inBounds(next))
-                     System.out.println(d+" "+next+" : "+avoid(next, avoid)+" "+dist[next.x][next.y]+" "+regions[next.x][next.y]);
-               }
-               if(inBounds(next)&&avoid(next, avoid)&&dist[next.x][next.y]==-1&&regions[next.x][next.y]>0)
+                     //System.out.println(d+" "+next+" : "+dist[next.x][next.y]+" "+regions[next.x][next.y]);
+               if(inBounds(next)&&dist[next.x][next.y]==-1&&regions[next.x][next.y]>0&&!next.equals(avoid))
                {
                   dist[next.x][next.y] = dist[id.x][id.y]+1;
                   prev[next.x][next.y] = id;
@@ -443,7 +477,10 @@ public class Rusher {
          }
       }   
       if(!pathFound)
-         throw new Exception("Pathfinding bug, no path found");
+      {
+         System.out.println("being blocked");
+         return null;
+      }
       Path p = new Path(start, end);
       while(prev[id.x][id.y]!=null)
       {
@@ -473,10 +510,9 @@ public class Rusher {
    }
    public static boolean avoid(Pair id, ArrayList<Pair> avoid)
    {
-      if(avoid!=null)
-         for(Pair a: avoid)
-            if(a.equals(id))
-               return false;
+      for(Pair a: avoid)
+         if(a.equals(id))
+            return false;
       return true;
    }
    public static Direction oppositeDirection(Direction d)
@@ -499,13 +535,54 @@ public class Rusher {
          return Direction.Southeast;
       return null;
    }
-   public static int countKarbAdj(int xPos, int yPos)
+   public static int countKarbAdj(Pair p, boolean useCur)
    {
-      int count = 0;
-      for(int x = Math.max(0, xPos-1); x < Math.min(eWidth-1, xPos+1); x++)
-         for(int y = Math.max(0, yPos-1); y < Math.min(eHeight-1, yPos+1); y++)
-            count+=karbDep[x][y];
-      return count;
+      int xPos = p.x;
+      int yPos = p.y;
+      if(useCur)
+      {
+         int count = 0;
+         for(int x = Math.max(0, xPos-1); x < Math.min(eWidth-1, xPos+1); x++)
+            for(int y = Math.max(0, yPos-1); y < Math.min(eHeight-1, yPos+1); y++)
+               count+=gc.karboniteAt(eMapLoc[x][y]);
+         return count;
+      }
+      else
+      {
+         int count = 0;
+         for(int x = Math.max(0, xPos-1); x < Math.min(eWidth-1, xPos+1); x++)
+            for(int y = Math.max(0, yPos-1); y < Math.min(eHeight-1, yPos+1); y++)
+               count+=karbDep[x][y];
+         return count;
+      }
+   }
+   //return best mine given known current conditions
+   public static KarbAdjacent bestMine(int id) throws Exception
+   {
+      Pair pos = unitPair(id);
+      KarbAdjacent best = null;
+      int bestPathSize = 0;
+      int bestScore = 0;
+      for(KarbAdjacent k: bestKarbAdj.get(regions[pos.x][pos.y]))
+      {
+         if(k.size<bestScore)
+            break;
+         if(availableMine[k.loc.x][k.loc.y])
+         {
+            paths[pos.x][pos.y][k.loc.x][k.loc.y] = findPath(pos, k.loc, null);
+            if(paths[pos.x][pos.y][k.loc.x][k.loc.y]==null)
+               continue;
+            int pathSize = paths[pos.x][pos.y][k.loc.x][k.loc.y].seq.size();
+            int score = k.size-pathSize*((int)gc.unit(id).workerHarvestAmount());
+            if(best==null||(score==bestScore&&pathSize<bestPathSize)||score>bestScore)
+            {
+               best = k;
+               bestPathSize = pathSize;
+               bestScore = score;
+            }
+         }
+      }
+      return best;
    }
    //floodfills map to assign region numbers
    public static void floodRegion(Pair p, int c)
@@ -529,7 +606,7 @@ public class Rusher {
             catch(Exception e) {e.printStackTrace();}
       }
    }
-   //floodfills region and returns a ArrayList containing locations with highest karbAdj value
+   //floodfills region and returns a PriorityQueue containing locations with highest karbAdj value
    public static PriorityQueue<KarbAdjacent> countMaxKarbAdj(Pair p)
    {
       boolean[][] used = new boolean[eWidth][eHeight];
@@ -539,7 +616,7 @@ public class Rusher {
       q.add(p);
       while(!q.isEmpty())
       {
-         Pair id = q.remove();;
+         Pair id = q.remove();
          if(karbAdj[id.x][id.y]>0)
             karbAdjOrder.add(new KarbAdjacent(id, karbAdj[id.x][id.y]));
          for(Direction d: directions)
@@ -593,6 +670,8 @@ public class Rusher {
       }
       public String toString()
       {
+         if(seq.size()==0)
+            return "[]";
          String s = "[";
          for(Direction d: seq)
             s+=d+", ";
@@ -602,15 +681,15 @@ public class Rusher {
    }
    static class KarbAdjacent implements Comparable<KarbAdjacent> {
       Pair loc;
-      int dep;
+      int size;
    
       public KarbAdjacent(Pair p, int d) {
          loc = p;
-         dep = d;
+         size = d;
       }
    // greatest goes first
       public int compareTo(KarbAdjacent x) {
-         return x.dep-dep;
+         return x.size-size;
       }
    }
    static class Task
@@ -630,11 +709,27 @@ public class Rusher {
       int buildID; //for building: target blueprint
       Pair moveTarget; //for moving: final destination
       Pair attack; //for moving: final destination
-      UnitType produceType; //for producing: type of 
+      UnitType produceType; //for producing: type of robot
+      Path detour; //for moving: if blocked, use this route
       public Task(int id, int tType)
       {
          unitID = id;
          taskType = tType;
+      }
+      public String toString()
+      {
+         String str = "Unit ID: ";
+         str+=unitID;
+         str+="\n Target: ";
+         str+=moveTarget;
+         str+="\n Detour: ";
+         str+=detour;
+         return str;
+      }
+      public boolean setDetour(Pair avoid) throws Exception
+      {
+         detour = findPath(unitPair(unitID), moveTarget, avoid);
+         return detour!=null;
       }
       public boolean startMoving(Pair target) throws Exception
       {
@@ -651,17 +746,26 @@ public class Rusher {
       public boolean stopMoving()
       {
          moveTarget = null;
+         detour = null;
          return true;
       }
       public boolean startMining(Pair target) throws Exception 
       {
          System.out.println("Unit "+unitID+" has started mining");
+         for(Direction d: directions)
+         {
+            int x = unitPair(unitID).x;
+            int y = unitPair(unitID).y;
+            if(inBounds(mapPair(eMapLoc[x][y].add(d))))
+               availableMine[x][y] = false;
+         }
          typeOn[0] = maxStep++;
          startMoving(target);
          return true;
       }
       public boolean stopMining()
       {
+         System.out.println("Unit "+unitID+" has stopped mining");
          typeOn[0] = 0;
          stopMoving();
          return true;
@@ -712,7 +816,7 @@ public class Rusher {
       }
       // if unit is a factory, return 0 if unloaded a unit, otherwise return -1
       // return -1*(tasktype+1) if finished with the task
-      public int doTask()
+      public int doTask() throws Exception
       {
          int ret = 0;
          switch(getTask()) {
@@ -720,13 +824,10 @@ public class Rusher {
                if(unitPair(unitID).equals(moveTarget))
                   stopMoving();
                int status = mine(unitID);
-               System.out.println("Unit "+unitID+"'s is trying to move from "+unitPair(unitID)+" to "+moveTarget);
-               System.out.println("Unit "+unitID+" has a status of "+status);
                if(moveTarget==null&&status==-1)
                {
                   ret = -1;
                   stopMining();
-                  System.out.println("Unit "+unitID+" has stopped mining");
                }
                break;
             case 1:
@@ -785,9 +886,9 @@ public class Rusher {
          }
          if(moveTarget!=null)
          {
-            int i = move(unitID, false);
+            int i = move(unitID);
             if(i==1)
-               moveTarget=null;
+               stopMoving();
          }
          return ret;
       }
