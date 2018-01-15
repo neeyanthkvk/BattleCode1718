@@ -752,17 +752,17 @@ public class Defense {
     	 updateOcc();
          int ret = 0;
          switch(getTask()) {
-            case 0:
+            case 0: // Worker Mining
                if(mine(unitID)==-1)
                   ret = -1;
                break;
-            case 1:
+            case 1: // Factory Building
                if(build(unitID, buildID)==1) {
                   ret = -2;
                   this.stopBuilding();
                }
                break;
-            case 2:
+            case 2: // Factory Shit
                if(produce(unitID, produceType)==1)
                {
                   //System.out.println("Successful production");
@@ -834,15 +834,25 @@ public class Defense {
                else
                   ret = -1;
                break;
-            case 3:
+            case 3: // Ranger Attack
                attack(unitID);
                break;
-            case 5:
+            case 4: // Healer EarthBound
+            	doHeal();
+            case 5: // Build Rockets
             	if(build(unitID, buildID)==1) {
                     ret = -6;
                     this.stopBuilding();
                  }
                  break;
+            case 6: // Healer MarsBound
+            
+            case 7: // Mages EarthBound
+            	
+            case 8: // Mages MarsBound
+            	
+            case 9: // Rangers MarsBound
+            	
             default:
                if(unitType(unitID).equals(UnitType.Worker))
                   mine(unitID);
@@ -855,6 +865,35 @@ public class Defense {
          }
          return 0;
       }
+      
+      void doHeal() {
+      	if(gc.senseNearbyUnits(gc.unit(unitID).location().mapLocation(),4).size() > 3) {
+    		int minUn = 1000;
+    		Direction dmin = null;
+    		for(Direction d: directions) {
+    			int l = (int) gc.senseNearbyUnits(gc.unit(unitID).location().mapLocation().add(d),4).size();
+    			if(gc.canMove(unitID, d) && l < minUn) {
+    				minUn = l;
+    				dmin = d;
+    			}
+    		}
+    		if(dmin == null);
+    		else gc.moveRobot(unitID, dmin);
+    	}            	
+    	VecUnit healUnits = gc.senseNearbyUnits(gc.unit(unitID).location().mapLocation(), 30);  
+    	for(int i = 0; i < (int) healUnits.size(); i++) {
+    		Unit tempUn = healUnits.get(i);
+    		if(tempUn.team().equals(gc.team())) {
+        		UnitType type = tempUn.unitType();
+        		if(type != UnitType.Rocket && type != UnitType.Factory) {
+        			if(tempUn.health() != tempUn.maxHealth() && gc.canHeal(unitID, tempUn.id())) {
+        				gc.heal(unitID, tempUn.id());
+        				break;
+        			}
+        		}
+    		}
+    	}
+      }
    }
    static class Connection
    {
@@ -865,42 +904,42 @@ public class Defense {
       {
       }
    }
-}
-class Pair
-{
-   int x;
-   int y;
-   public Pair(int a, int b)
+   static class Pair
    {
-      x = a;
-      y = b;
-   }
-   public boolean equals(Pair p)
-   {
-      if(p==null)
-         return false;
-      return x==p.x&&y==p.y;
-   }
-   public String toString()
-   {
-      return x+" "+y;
-   }
-   static class CompareX implements Comparator<Pair>
-   {
-      public int compare(Pair p1, Pair p2)
-      {
-         if(p1.x!=p2.x)
-            return p1.x-p2.x;
-         return p1.y-p2.y;
-      }
-   }
-   static class CompareY implements Comparator<Pair>
-   {
-      public int compare(Pair p1, Pair p2)
-      {
-         if(p1.y!=p2.y)
-            return p1.y-p2.y;
-         return p1.x-p2.x;
-      }
-   }
+	   int x;
+	   int y;
+	   public Pair(int a, int b)
+	   {
+	      x = a;
+	      y = b;
+	   }
+	   public boolean equals(Pair p)
+	   {
+	      if(p==null)
+	         return false;
+	      return x==p.x&&y==p.y;
+	   }
+	   public String toString()
+	   {
+	      return x+" "+y;
+	   }
+	   static class CompareX implements Comparator<Pair>
+	   {
+	      public int compare(Pair p1, Pair p2)
+	      {
+	         if(p1.x!=p2.x)
+	            return p1.x-p2.x;
+	         return p1.y-p2.y;
+	      }
+	   }
+	   static class CompareY implements Comparator<Pair>
+	   {
+	      public int compare(Pair p1, Pair p2)
+	      {
+	         if(p1.y!=p2.y)
+	            return p1.y-p2.y;
+	         return p1.x-p2.x;
+	      }
+	   }
+	}
 }
