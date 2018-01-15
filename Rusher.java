@@ -42,7 +42,8 @@ public class Rusher {
    static HashMap<Integer, PriorityQueue<KarbAdjacent>> bestKarbAdj = new HashMap<Integer, PriorityQueue<KarbAdjacent>>();
    static int[][] regions = new int[eWidth][eHeight];
    static int regionCount = 0;
-   static boolean[][] availableMine = new boolean[eWidth][eHeight];
+   static boolean[][] noKarbonite = new boolean[eWidth][eHeight];
+   static boolean[][] beingMined = new boolean[eWidth][eHeight];
    static boolean[][] viableSite = new boolean[eWidth][eHeight];
    static int siteParity = -1;
       
@@ -70,10 +71,6 @@ public class Rusher {
             enemyTeam = Team.Blue;
          else
             enemyTeam = Team.Red;
-      
-      //initializes availableMine
-         for(int x = 0; x < eWidth; x++)
-            Arrays.fill(availableMine[x], true);
             
       //update units
          updateUnits();
@@ -170,6 +167,7 @@ public class Rusher {
             throw new Exception("Map has no open spaces");
          if(bestSite.blueID==-1)
             throw new Exception("No unit is close enough to site");
+         siteParity = (bestSite.loc.x+bestSite.loc.y)%2;
             
       //assigns tasks
          for(int id: bestSite.init)
@@ -204,7 +202,16 @@ public class Rusher {
             System.out.println("Earth Round "+gc.round()+": ");
             System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
             updateUnits();
-           
+            
+            for(int id: myUnits)
+            {
+               if(gc.unit(id).location().isInGarrison())
+                  continue;
+               Pair p = unitPair(id);
+               if(!noKarbonite[p.x][p.y]&&countKarbAdj(unitPair(id), true)==0)
+                  noKarbonite[p.x][p.y] = true;
+            }
+         
             for(int id: workers)
             {
                int task = tasks.get(id).getTask();
@@ -223,7 +230,6 @@ public class Rusher {
                   //System.out.println(bestKarbAdj.get(regions[p.x][p.y]).size()+" regions left");
                   tasks.get(id).startMining(bestMine(id).loc);
                }
-               tasks.get(id).doTask();
             }
             for(int id: factories)
             {
@@ -240,20 +246,9 @@ public class Rusher {
                   tasks.get(id).startAttacking();
                }
                tasks.get(id).doTask();
-               tasks.get(id).doTask();
             }
          } 
          catch(Exception e) {e.printStackTrace();} 
-         if(gc.round()>=105)
-         {
-            out.println("Round "+gc.round());
-            for(int id: workers)
-            {
-               out.println();
-               out.println(workers);
-            }
-            out.println("-----");
-         }
          gc.nextTurn();
       }
          //End of match
@@ -279,7 +274,7 @@ public class Rusher {
          minRadius = (int)gc.unit(id).rangerCannotAttackRange();
       HashSet<Integer> enemy = toIDList(gc.senseNearbyUnitsByTeam(curLoc, range, enemyTeam));
       if(enemy.size()>0)
-         tasks.get(id).stopMoving();
+         tasks.get(id).halting = true;
       if(!gc.isAttackReady(id))
          return -2;
       int bestEnemy = -1;
@@ -291,7 +286,7 @@ public class Rusher {
             continue;
          int dist = distance(unitPair(id), unitPair(targetEnemy));
          UnitType ut = gc.unit(targetEnemy).unitType();
-         if(bestEnemy==-1||(bestUnitType(bestUT, ut)*10000+bestDist-dist)<0)
+         if(bestEnemy==-1||(bestUnitType(ut, bestUT)*10000+dist-bestDist)<0)
          {
             bestEnemy = targetEnemy;
             bestDist = dist;
@@ -319,9 +314,11 @@ public class Rusher {
       else
          return -2;
    }
-   //worker id, structure id, -1 means cannot build, 0 means build success, 1 means structure is finished
+   //worker id, structure id, -2 means on top of site, -1 means cannot build, 0 means build success, 1 means structure is finished
    public static int build(int wID, Pair p) 
    {
+      if(unitPair(wID).equals(p))
+         return -2;
       if(!gc.canSenseLocation(eMapLoc[p.x][p.y]))
          return -1;
       if(!gc.hasUnitAtLocation(eMapLoc[p.x][p.y]))
@@ -383,15 +380,15 @@ public class Rusher {
       gc.harvest(u.id(), best);
       return 0;
    }
-   //return -3 means enemy spotted, -2 means path blocked, -1 means too much heat, 0 means move success, 1 means reached target
+   //return -3 means enemy spotted, -2 means path blocked, -1 means too much heat or halting, 0 means move success, 1 means reached target
    public static int move(int id) throws Exception
    {
+      if(tasks.get(id).halting)
+         return -1;
       Unit u = gc.unit(id);
       Pair prev = unitPair(id);
       Pair target = tasks.get(id).moveTarget;
-      if(availableMine[prev.x][prev.y]&&countKarbAdj(unitPair(id), true)==0)
-         availableMine[prev.x][prev.y] = false;
-      if(prev.equals(target))
+      if(prev.equals(target)||target==null)
          return 1;
          
       Path pa = paths[prev.x][prev.y][target.x][target.y];
@@ -410,7 +407,7 @@ public class Rusher {
             return -1;
       else
       {
-         if(gc.hasUnitAtLocation(eMapLoc[prev.x][prev.y].add(pa.seq.get(0))))
+         if(!gc.hasUnitAtLocation(eMapLoc[prev.x][prev.y].add(pa.seq.get(0))))
             return -2;
          Unit block = gc.senseUnitAtLocation(eMapLoc[prev.x][prev.y].add(pa.seq.get(0)));
          if(block.team().equals(enemyTeam)||!moveable(unitPair(block.id())))
@@ -474,7 +471,9 @@ public class Rusher {
    //MAP METHODS
    public static Path findPath(Pair start, Pair end, Pair avoid) throws Exception
    {
-      if(regions[start.x][start.y]!=regions[start.x][start.y])
+      if(start.equals(end))
+         return null;
+      if(regions[start.x][start.y]!=regions[end.x][end.y])
          throw new Exception("Different regions");
       if(paths[start.x][start.y][end.x][end.y]!=null)
          return paths[start.x][start.y][end.x][end.y];
@@ -514,7 +513,7 @@ public class Rusher {
       }   
       if(!pathFound)
       {
-         System.out.println("being blocked");
+         System.out.println("Location "+start+" is being blocked");
          return null;
       }
       Path p = new Path(start, end);
@@ -578,10 +577,12 @@ public class Rusher {
       {
          Pair p = unitPair(id);
          paths[p.x][p.y][site.x][site.y] = findPath(p, site, null);
-         int dist = paths[p.x][p.y][site.x][site.y].seq.size();
+         int dist;
          if(site.equals(p))
             dist = 1;
-         if(paths[p.x][p.y][site.x][site.y].seq.size()<=2)
+         else
+            dist = paths[p.x][p.y][site.x][site.y].seq.size();
+         if(dist<=2)
          {
             totalDist+=dist;
             ret.add(id);
@@ -605,16 +606,24 @@ public class Rusher {
          for(Direction d: directions)
          {
             Pair site = mapPair(eMapLoc[cur.x][cur.y].add(d));
-            if(inBounds(p)&&!used[site.x][site.y])
+            if(inBounds(site)&&!used[site.x][site.y])
             {
-               if(moveable(p))
+               if(moveable(site))
                   return site;
-               if(regions[p.x][p.y]>0&&(site.x+site.y)%2==siteParity)
+               if(regions[site.x][site.y]>0&&(site.x+site.y)%2==siteParity)
                   q.add(site);
             }
          }
       }
       return null;
+   }
+   public static Pair bestAttack(int id)
+   {
+      Pair p = null;
+      
+   
+   
+      return p;
    }
    //END OF MAP METHODS
    
@@ -635,7 +644,7 @@ public class Rusher {
          for(Direction d: directions)
             try{
                Pair next = mapPair(eMapLoc[id.x][id.y].add(d));   
-               if(inBounds(next)&&!used[next.x][next.y])
+               if(inBounds(next)&&!used[next.x][next.y]&&regions[next.x][next.y]>0)
                {
                   used[next.x][next.y] = true;
                   q.add(next);
@@ -670,6 +679,8 @@ public class Rusher {
    public static KarbAdjacent bestMine(int id) throws Exception
    {
       Pair pos = unitPair(id);
+      if(bestKarbAdj.get(regions[pos.x][pos.y])==null||bestKarbAdj.get(regions[pos.x][pos.y]).size()==0)
+         return null;
       KarbAdjacent best = null;
       int bestPathSize = 0;
       int bestScore = 0;
@@ -677,7 +688,7 @@ public class Rusher {
       {
          if(k.size<bestScore)
             break;
-         if(availableMine[k.loc.x][k.loc.y])
+         if(!noKarbonite[k.loc.x][k.loc.y]&&!beingMined[k.loc.x][k.loc.y])
          {
             paths[pos.x][pos.y][k.loc.x][k.loc.y] = findPath(pos, k.loc, null);
             if(paths[pos.x][pos.y][k.loc.x][k.loc.y]==null)
@@ -850,9 +861,13 @@ public class Rusher {
          loc = p;
          size = d;
       }
-   // greatest goes first
+   //greatest goes first
       public int compareTo(KarbAdjacent x) {
          return x.size-size;
+      }
+      public String toString()
+      {
+         return "["+loc.toString()+" "+size+"]";
       }
    }
    static class Task
@@ -875,6 +890,7 @@ public class Rusher {
       UnitType produceType = null; //for producing: type of robot
       UnitType buildType = null;
       Path detour = null; //for moving: if blocked, use this route
+      boolean halting = false;
       public Task(int id)
       {
          unitID = id;
@@ -916,16 +932,14 @@ public class Rusher {
       {
          if(target==null)
             return false;
-         //System.out.println("Unit "+unitID+" has started mining");
-         for(Direction d: directions)
-         {
-            int x = unitPair(unitID).x;
-            int y = unitPair(unitID).y;
-            if(inBounds(mapPair(eMapLoc[x][y].add(d))))
-               availableMine[x][y] = false;
-         }
          typeOn[0] = maxStep++;
          startMoving(target);
+         for(Direction d: directions)
+         {
+            Pair p = mapPair(eMapLoc[moveTarget.x][moveTarget.y].add(d));
+            if(inBounds(p))
+               beingMined[p.x][p.y] = true;
+         }
          return true;
       }
       public boolean stopMining()
@@ -1011,24 +1025,31 @@ public class Rusher {
          int status;
          switch(getTask()) {
             case 0:
-               if(unitPair(unitID).equals(moveTarget))
-                  stopMoving();
+               System.out.println("unit "+unitID+" is at "+unitPair(unitID)+" and is mining "+moveTarget);
+               if(noKarbonite[moveTarget.x][moveTarget.y])
+                  startMining(bestMine(unitID).loc);
                status = mine(unitID);
-               if(moveTarget==null&&status==-1)
+               if(moveTarget.equals(p)&&status==-1)
                {
                   ret = -1;
+                  noKarbonite[p.x][p.y] = true;
                   stopMining();
                }
                break;
             case 1:
-               if(gc.round()==48)
-               {
-                  System.out.println(p);
-                  System.out.println(buildTarget);
-               }
                if(eMapLoc[p.x][p.y].isAdjacentTo(eMapLoc[buildTarget.x][buildTarget.y]))
                   stopMoving();
                status = build(unitID, buildTarget);
+               if(status==-2)
+                  if(gc.isMoveReady(unitID))
+                     for(Direction d: directions)
+                        if(!d.equals(Direction.Center))
+                           if(gc.canMove(unitID, d))
+                           {
+                              gc.moveRobot(unitID, d);
+                              status = build(unitID, buildTarget);
+                              break;
+                           }
                if(status==1)
                   stopBuilding();
                break;
@@ -1065,15 +1086,16 @@ public class Rusher {
             case 3:
                status = blueprint(unitID, buildTarget, buildType);
                if(status==-2)
-                  for(Direction d: directions)
-                     if(!d.equals(Direction.Center))
-                        if(gc.canMove(unitID, d))
-                        {
-                           gc.moveRobot(unitID, d);
-                           status = blueprint(unitID, buildTarget, buildType);
-                           break;
-                        }
-               System.out.println("unit "+unitID+" blueprint status = "+status);
+                  if(gc.isMoveReady(unitID))
+                     for(Direction d: directions)
+                        if(!d.equals(Direction.Center))
+                           if(gc.canMove(unitID, d))
+                           {
+                              gc.moveRobot(unitID, d);
+                              status = blueprint(unitID, buildTarget, buildType);
+                              break;
+                           }
+               //System.out.println("unit "+unitID+" blueprint status = "+status);
                if(status>=0)
                {
                   Pair temp = buildTarget;
@@ -1083,7 +1105,7 @@ public class Rusher {
                break;
             case 4:
                if(unitPair(unitID)==moveTarget)
-                  stopAttacking();
+                  startAttacking();
                attack(unitID);
                break;
             default:
@@ -1093,8 +1115,6 @@ public class Rusher {
          if(moveTarget!=null)
          {
             int i = move(unitID);
-            if(i==1)
-               stopMoving();
          }
          return ret;
       }
