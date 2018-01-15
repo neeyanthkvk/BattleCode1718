@@ -34,6 +34,7 @@ public class Defense {
    static HashMap<Integer,Integer> typePerTask = new HashMap<Integer,Integer>();
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
    static boolean[][] beingMined = new boolean[eWidth][eHeight];
+   static HashMap<Integer,Integer> rocketLoad = new HashMap<Integer,Integer>();
    
    // Map Info
    static MapLocation[][] eMapLoc = new MapLocation[eWidth][eHeight];
@@ -846,6 +847,9 @@ public class Defense {
                  }
                  break;
             case 6: // Healer MarsBound
+            	for(int rocketunit:rocketLoad) {
+            		
+            	}
             
             case 7: // Mages EarthBound
             	

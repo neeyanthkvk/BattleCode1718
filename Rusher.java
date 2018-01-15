@@ -59,7 +59,7 @@ public class Rusher {
          gc.queueResearch(UnitType.Worker);  // 25 Rounds - "Gimme some of that Black Stuff"
          gc.queueResearch(UnitType.Ranger);  // 100 Rounds - "Scopes"
          gc.queueResearch(UnitType.Ranger);  // 200 Rounds - "Snipe"
-         gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocketry"
+         // gc.queueResearch(UnitType.Rocket);  // 100 Rounds - "Rocketry"
          gc.queueResearch(UnitType.Knight);  // 25 Rounds - "Armor"
          gc.queueResearch(UnitType.Knight);  // 75 Rounds - "Even More Armor"
          gc.queueResearch(UnitType.Healer);  // 25 Rounds - "Spirit Water"
@@ -390,8 +390,7 @@ public class Rusher {
       Pair target = tasks.get(id).moveTarget;
       if(prev.equals(target)||target==null)
          return 1;
-         
-      Path pa = paths[prev.x][prev.y][target.x][target.y];
+      Path pa = findPath(prev,target,new Pair(100000,100000));  
       if(tasks.get(id).detour!=null)
          pa = tasks.get(id).detour;
       if(gc.canMove(id, pa.seq.getFirst()))
@@ -1018,6 +1017,13 @@ public class Rusher {
       }
       // if unit is a factory, return 0 if unloaded a unit, otherwise return -1
       // return -1*(tasktype+1) if finished with the task
+      /* 
+      0: mining
+      1: building
+      2: producing
+      3: attack
+      4: heal
+      */
       public int doTask() throws Exception
       {
          Pair p = unitPair(unitID);
@@ -1052,6 +1058,7 @@ public class Rusher {
                            }
                if(status==1)
                   stopBuilding();
+                  findNewWork(UnitType.Worker);
                break;
             case 2:
                produce(unitID, produceType);
@@ -1104,7 +1111,7 @@ public class Rusher {
                }
                break;
             case 4:
-               if(unitPair(unitID)==moveTarget)
+               if(unitPair(unitID).equals(moveTarget))
                   startAttacking();
                attack(unitID);
                break;
