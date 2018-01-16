@@ -400,7 +400,7 @@ public class Rusher {
       if(prev.equals(target)||target==null)
          return 1;
       Path pa = findPath(prev, target, null);  
-      if(tasks.get(id).detour!=null)
+      if(tasks.get(id).detour!=null && tasks.get(id).size() != 0)
       {
          pa = tasks.get(id).detour;
          System.out.println("Currently using detour");
@@ -501,8 +501,9 @@ public class Rusher {
             break;
          }
       attackList.clear();
-      for(int id: enemyUnits)
-         attackList.add(unitPair(id));
+      if(enemyUnits != null)
+          for(int id: enemyUnits)
+             attackList.add(unitPair(id));
       if(attackList.size()==0)
          for(int id: enemyInit.keySet())
             attackList.add(enemyInit.get(id));
