@@ -399,16 +399,31 @@ public class Rusher {
       Pair target = tasks.get(id).moveTarget;
       if(prev.equals(target)||target==null)
          return 1;
-      Path pa = paths[prev.x][prev.y][target.x][target.y];  
+      Path pa = findPath(prev, target, null);  
       if(tasks.get(id).detour!=null)
+      {
          pa = tasks.get(id).detour;
+         System.out.println("Currently using detour");
+      }
+      if(pa==null)
+      {
+         System.out.println(prev+" vs "+target);
+         System.out.println(findPath(prev, target, null));
+      }
       if(gc.canMove(id, pa.seq.getFirst()))
          if(gc.isMoveReady(id))
          {
-            gc.moveRobot(id, pa.seq.get(0));
+            gc.moveRobot(id, pa.seq.getFirst());
             Pair p = unitPair(id);
-            paths[p.x][p.y][target.x][target.y] = pa.copy();
-            paths[p.x][p.y][target.x][target.y].seq.removeFirst();
+            if(tasks.get(id).detour==null)
+            {
+               paths[p.x][p.y][target.x][target.y] = pa.copy();
+               paths[p.x][p.y][target.x][target.y].seq.removeFirst();
+            }
+            else
+            {
+               tasks.get(id).detour.seq.removeFirst();   
+            }
             return 0;
          }
          else
@@ -428,7 +443,7 @@ public class Rusher {
                   if(gc.isMoveReady(id))
                   {
                      gc.moveRobot(id, pa.seq.get(0));
-                     pa.seq.removeFirst();
+                     tasks.get(id).detour.seq.removeFirst();
                      return 0;
                   }
                   else
@@ -514,10 +529,14 @@ public class Rusher {
       q.add(start);
       Pair id = null;
       boolean pathFound = false;
-      System.out.println(start+" to "+end);
       cycle: while(!q.isEmpty())
       {
          id = q.remove();
+         if(id.equals(end))
+         {
+            pathFound = true;
+            break;
+         }
          for(Direction d: directions)
          {
             try
@@ -531,11 +550,6 @@ public class Rusher {
                   {
                      dist[next.x][next.y] = dist[id.x][id.y]+1;
                      prev[next.x][next.y] = id;
-                     if(next.equals(end))
-                     {
-                        pathFound = true;
-                        break cycle;
-                     }
                      q.add(next);
                   }
                   used[next.x][next.y] = true;
