@@ -282,18 +282,18 @@ public class Rusher {
          return -2;
       int bestEnemy = -1;
       int bestDist = 0;
-      UnitType bestUT = null;
+      Unit bestU = null;
       for(int targetEnemy: enemy)
       {
          if(!gc.canAttack(id, targetEnemy))
             continue;
          int dist = distance(unitPair(id), unitPair(targetEnemy));
-         UnitType ut = gc.unit(targetEnemy).unitType();
-         if(bestEnemy==-1||(bestUnitType(ut, bestUT)*10000+dist-bestDist)<0)
+         Unit u = gc.unit(targetEnemy);
+         if(bestEnemy==-1||(bestUnitType(u, bestU)*10000+dist-bestDist)<0)
          {
             bestEnemy = targetEnemy;
             bestDist = dist;
-            bestUT = ut;
+            bestU = u;
          }
       }
       if(bestEnemy==-1)
@@ -417,7 +417,7 @@ public class Rusher {
          if(gc.isMoveReady(id))
          {
             gc.moveRobot(id, pa.seq.getFirst());
-            Pair p = unitPair(id);
+            Pair p = mapPair(eMapLoc[prev.x][prev.y].add(pa.seq.getFirst()));
             if(tasks.get(id).detour==null)
             {
                paths[p.x][p.y][target.x][target.y] = pa.copy();
@@ -442,6 +442,7 @@ public class Rusher {
             {
                System.out.println("unit at "+prev+" has found detour");
                pa = tasks.get(id).detour;
+               System.out.println(pa);
                if(gc.canMove(id, pa.seq.get(0)))
                   if(gc.isMoveReady(id))
                   {
@@ -771,13 +772,15 @@ public class Rusher {
    //END OF KARBONITE-RELATED METHODS
    
    //HELPER METHODS
-   public static int bestUnitType(UnitType u1, UnitType u2)
+   public static int bestUnitType(Unit ua, Unit ub)
    {
+      UnitType u1 = ua.unitType();
+      UnitType u2 = ub.unitType();
       if(u1.equals(u2))
          return 0;
-      if(u1.equals(UnitType.Factory))
+      if(u1.equals(UnitType.Factory)&&ua.structureIsBuilt()!=0)
          return -1;
-      if(u2.equals(UnitType.Factory))
+      if(u2.equals(UnitType.Factory)&&ub.structureIsBuilt()!=0)
          return 1;
       if(u1.equals(UnitType.Knight))
          return -1;
@@ -790,6 +793,10 @@ public class Rusher {
       if(u1.equals(UnitType.Ranger))
          return -1;
       if(u2.equals(UnitType.Ranger))
+         return 1;
+      if(u1.equals(UnitType.Factory))
+         return -1;
+      if(u2.equals(UnitType.Factory))
          return 1;
       if(u1.equals(UnitType.Healer))
          return -1;
