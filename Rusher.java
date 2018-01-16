@@ -3,6 +3,7 @@ import java.util.*;
 import java.io.*;
 @SuppressWarnings("unchecked")
 public class Rusher {
+
    //Basic Info 
    static PrintWriter out;
    static long startTime = System.currentTimeMillis();
@@ -30,9 +31,12 @@ public class Rusher {
    static HashSet<Integer> rangers;
    static HashSet<Integer> rockets;
    static HashSet<Integer> workers;
+   static int builderCount = 0;
+   static int minerCount = 0;
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
    static HashMap<Integer, Pair> enemyInit = new HashMap<Integer, Pair>();
    static HashSet<Integer> enemyUnits;
+   static HashSet<Pair> attackList = new HashSet<Pair>();
    
    // Map Info
    static MapLocation[][] eMapLoc = new MapLocation[eWidth][eHeight];
@@ -43,8 +47,9 @@ public class Rusher {
    static int[][] regions = new int[eWidth][eHeight];
    static int regionCount = 0;
    static boolean[][] noKarbonite = new boolean[eWidth][eHeight];
-   static boolean[][] beingMined = new boolean[eWidth][eHeight];
+   static boolean[][] usedMine = new boolean[eWidth][eHeight];
    static boolean[][] viableSite = new boolean[eWidth][eHeight];
+   static int[][] siteID = new int[eWidth][eHeight];
    static int siteParity = -1;
       
    static {
@@ -159,28 +164,23 @@ public class Rusher {
                {
                   viableSite[x][y] = true;
                   Site s = initSite(p);
-                  if(bestSite==null||s.compareTo(bestSite)<0)
+                  if(bestSite==null||bestSite.compareTo(s)>0)
                      bestSite = s;
                }
             }
-         if(bestSite==null)
-            throw new Exception("Map has no open spaces");
-         if(bestSite.blueID==-1)
-            throw new Exception("No unit is close enough to site");
+         try {
+            if(bestSite==null)
+               throw new Exception("Map has no open spaces");
+         } catch(Exception e) {e.printStackTrace();}
          siteParity = (bestSite.loc.x+bestSite.loc.y)%2;
+         System.out.println("Best site is "+bestSite.loc);
             
       //assigns tasks
          for(int id: bestSite.init)
-            if(id==bestSite.blueID)
-            {
-               tasks.get(id).taskType = 1;
-               tasks.get(id).startBlueprinting(bestSite.loc, UnitType.Factory);
-            }
-            else
-            {
-               tasks.get(id).taskType = 0;
-               tasks.get(id).startBuilding(bestSite.loc);
-            }
+         {
+            tasks.get(id).taskType = 1;
+            tasks.get(id).startBuilding(bestSite.loc, UnitType.Factory);
+         }
          
       //end of initialization
       } 
@@ -214,22 +214,34 @@ public class Rusher {
          
             for(int id: workers)
             {
+               if(gc.round()>1&&Math.random()<0.25&&(builderCount/2<eWidth||minerCount/2<eWidth))
+                  for(Direction d: directions)
+                     if(gc.canReplicate(id, d))
+                     {
+                        gc.replicate(id, d);
+                        int newID = gc.senseUnitAtLocation(gc.unit(id).location().mapLocation().add(d)).id();
+                        tasks.put(newID, new Task(newID));
+                        if(minerCount>builderCount)
+                        {
+                           tasks.get(newID).taskType = 1;
+                           builderCount++;
+                        }
+                        else
+                           minerCount++;
+                     }
                int task = tasks.get(id).getTask();
                if(task==-1)
                {
                   int type = tasks.get(id).taskType;
                   if(type==0)
-                     tasks.get(id).startMining(bestMine(id).loc);
+                     if(bestMine(id)!=null)
+                        tasks.get(id).startMining(bestMine(id).loc);
+                     else
+                        tasks.get(id).taskType = 1;
                   if(type==1)
-                     tasks.get(id).startBlueprinting(bestSite(unitPair(id)), UnitType.Factory);
+                     tasks.get(id).startBuilding(bestSite(unitPair(id)), UnitType.Factory);
                }
                int val = tasks.get(id).doTask();
-               if(task==0&&val==-1)
-               {
-                  Pair p = unitPair(id);
-                  //System.out.println(bestKarbAdj.get(regions[p.x][p.y]).size()+" regions left");
-                  tasks.get(id).startMining(bestMine(id).loc);
-               }
             }
             for(int id: factories)
             {
@@ -243,7 +255,7 @@ public class Rusher {
                   continue;
                if(tasks.get(id).getTask()==-1)
                {
-                  tasks.get(id).startAttacking();
+                  tasks.get(id).startAttacking(bestAttack(id));
                }
                tasks.get(id).doTask();
             }
@@ -273,24 +285,26 @@ public class Rusher {
       if(gc.unit(id).unitType().equals(UnitType.Ranger))
          minRadius = (int)gc.unit(id).rangerCannotAttackRange();
       HashSet<Integer> enemy = toIDList(gc.senseNearbyUnitsByTeam(curLoc, range, enemyTeam));
-      if(enemy.size()>0)
-         tasks.get(id).halting = true;
+      if(enemy.size()==0)
+         tasks.get(id).halting = false;
+      else
+         tasks.get(id).halting = true;      
       if(!gc.isAttackReady(id))
          return -2;
       int bestEnemy = -1;
       int bestDist = 0;
-      UnitType bestUT = null;
+      Unit bestU = null;
       for(int targetEnemy: enemy)
       {
          if(!gc.canAttack(id, targetEnemy))
             continue;
          int dist = distance(unitPair(id), unitPair(targetEnemy));
-         UnitType ut = gc.unit(targetEnemy).unitType();
-         if(bestEnemy==-1||(bestUnitType(ut, bestUT)*10000+dist-bestDist)<0)
+         Unit u = gc.unit(targetEnemy);
+         if(bestEnemy==-1||(bestUnitType(u, bestU)*10000+dist-bestDist)<0)
          {
             bestEnemy = targetEnemy;
             bestDist = dist;
-            bestUT = ut;
+            bestU = u;
          }
       }
       if(bestEnemy==-1)
@@ -314,43 +328,52 @@ public class Rusher {
       else
          return -2;
    }
-   //worker id, structure id, -2 means on top of site, -1 means cannot build, 0 means build success, 1 means structure is finished
-   public static int build(int wID, Pair p) 
-   {
-      if(unitPair(wID).equals(p))
-         return -2;
-      if(!gc.canSenseLocation(eMapLoc[p.x][p.y]))
-         return -1;
-      if(!gc.hasUnitAtLocation(eMapLoc[p.x][p.y]))
-         return -1;
-      Unit target = gc.senseUnitAtLocation(eMapLoc[p.x][p.y]);
-      int sID = target.id();
-      if(gc.unit(sID).structureIsBuilt()!=0)
-         return 1;
-      if(gc.canBuild(wID, sID))
-         gc.build(wID, sID);
-      else
-         return -1;
-      return 0;
-   }
-   //returns the id of the blueprinted structure, -1 if too far away, -2 if worker is on the site, -3 if not enough resources
-   public static int blueprint(int id, Pair target, UnitType ut) throws Exception
+   //worker id, structure id, -2 means on top of site, -1 means too far away, 0 means build success, 1 means structure is finished
+   public static int build(int id, Pair target, UnitType ut) 
    {
       Pair p = unitPair(id);
-      if(!eMapLoc[p.x][p.y].isAdjacentTo(eMapLoc[target.x][target.y]))
-         return -1;
-      Direction d = findDirection(p, target);
-      if(d.equals(Direction.Center))
+      //System.out.println("Unit at "+p+" is trying to build at "+target+" which has "+siteID[target.x][target.y]);
+      if(p.equals(target))
          return -2;
+      if(siteID[target.x][target.y]==-1)
+      {
+         System.out.println("build error");
+         return -11;
+      }
+      if(siteID[target.x][target.y]==-2)
+         return blueprint(id, target, ut);
+      int sID = siteID[target.x][target.y];
+      if(gc.unit(sID).structureIsBuilt()!=0)
+         return 1;
+      if(gc.canBuild(id, sID))
+         gc.build(id, sID);
+      else
+         return -1;
+      if(gc.unit(sID).structureIsBuilt()!=0)
+         return 1;
+      return 0;
+   }
+   //returns the id of the blueprinted structure, -5 if too far away, -4 if not enough resources, -3 if being blocked
+   public static int blueprint(int id, Pair target, UnitType ut)
+   {
+      Pair p = unitPair(id);
+      //System.out.println("Unit at "+p+" is trying to blueprint at "+target);
+      if(!eMapLoc[p.x][p.y].isAdjacentTo(eMapLoc[target.x][target.y]))
+         return -5;
+      Direction d = findDirection(p, target);
       if(gc.canBlueprint(id, ut, d))
       {
          gc.blueprint(id, ut, d);
          int blueID = gc.senseUnitAtLocation(gc.unit(id).location().mapLocation().add(d)).id();
          tasks.put(blueID, new Task(blueID));
          tasks.get(blueID).taskType = 2;
-         return blueID;
+         siteID[target.x][target.y] = blueID;
+         return 0;
       }
-      return -2;
+      if(gc.karbonite()<100)
+         return -4;
+      else
+         return -3;
    }
    //-2 means too much heat, -1 means no karbonite in adjacent squares, 0 means successfully mined
    public static int mine(int id)
@@ -377,6 +400,9 @@ public class Rusher {
          return -1;
       if(!gc.canHarvest(id, best))
          return -2;
+      if(gc.karboniteAt(gc.unit(u.id()).location().mapLocation().add(best)) == 0) {
+         return -1;      
+      }
       gc.harvest(u.id(), best);
       return 0;
    }
@@ -390,34 +416,52 @@ public class Rusher {
       Pair target = tasks.get(id).moveTarget;
       if(prev.equals(target)||target==null)
          return 1;
-      Path pa = findPath(prev,target,new Pair(100000,100000));  
-      if(tasks.get(id).detour!=null)
+      Path pa = findPath(prev, target, null);  
+      if(tasks.get(id).detour!=null && tasks.get(id).detour.seq.size() != 0)
+      {
          pa = tasks.get(id).detour;
+         System.out.println("Currently using detour");
+      }
+      if(pa==null)
+      {
+         System.out.println(prev+" vs "+target);
+         System.out.println(findPath(prev, target, null));
+      }
       if(gc.canMove(id, pa.seq.getFirst()))
          if(gc.isMoveReady(id))
          {
-            gc.moveRobot(id, pa.seq.get(0));
-            Pair p = unitPair(id);
-            paths[p.x][p.y][target.x][target.y] = pa.copy();
-            paths[p.x][p.y][target.x][target.y].seq.removeFirst();
+            gc.moveRobot(id, pa.seq.getFirst());
+            Pair p = mapPair(eMapLoc[prev.x][prev.y].add(pa.seq.getFirst()));
+            if(tasks.get(id).detour==null)
+            {
+               paths[p.x][p.y][target.x][target.y] = pa.copy();
+               paths[p.x][p.y][target.x][target.y].seq.removeFirst();
+            }
+            else
+            {
+               tasks.get(id).detour.seq.removeFirst();   
+            }
             return 0;
          }
          else
             return -1;
       else
       {
-         if(!gc.hasUnitAtLocation(eMapLoc[prev.x][prev.y].add(pa.seq.get(0))))
-            return -2;
+         // if(!gc.hasUnitAtLocation(eMapLoc[prev.x][prev.y].add(pa.seq.get(0))))
+            // return -2;
+         System.out.println("unit at "+prev+" is finding detour");
          Unit block = gc.senseUnitAtLocation(eMapLoc[prev.x][prev.y].add(pa.seq.get(0)));
          if(block.team().equals(enemyTeam)||!moveable(unitPair(block.id())))
             if(tasks.get(id).setDetour(unitPair(block.id())))
             {
+               System.out.println("unit at "+prev+" has found detour");
                pa = tasks.get(id).detour;
-               if(gc.canMove(id, pa.seq.getFirst()))
+               System.out.println(pa);
+               if(gc.canMove(id, pa.seq.get(0)))
                   if(gc.isMoveReady(id))
                   {
                      gc.moveRobot(id, pa.seq.get(0));
-                     pa.seq.removeFirst();
+                     tasks.get(id).detour.seq.removeFirst();
                      return 0;
                   }
                   else
@@ -438,11 +482,17 @@ public class Rusher {
       rangers = new HashSet<Integer>();
       rockets = new HashSet<Integer>();
       workers = new HashSet<Integer>();
+      for(int x = 0; x < eWidth; x++)
+         for(int y = 0; y < eHeight; y++)
+            siteID[x][y] = -1;
       for(int id: myUnits)
       {
          UnitType ut = gc.unit(id).unitType();
          if(ut.equals(UnitType.Factory))
+         {
             factories.add(id);
+            siteID[unitPair(id).x][unitPair(id).y] = id;
+         }
          else if(ut.equals(UnitType.Healer))
             healers.add(id);
          else if(ut.equals(UnitType.Knight))
@@ -454,7 +504,23 @@ public class Rusher {
          else if(ut.equals(UnitType.Rocket))
             rockets.add(id);
          else if(ut.equals(UnitType.Worker))
+         {
             workers.add(id);
+            try{
+               if(gc.round()>1)
+               {
+                  if(tasks.get(id).buildTarget!=null&&siteID[unitPair(id).x][unitPair(id).y]==-1)
+                     siteID[unitPair(id).x][unitPair(id).y]=-2;
+                  if(tasks.get(id).taskType==0)
+                     minerCount++;
+                  else
+                     builderCount++;
+               }
+            } catch(Exception e) {
+               System.out.println("unit "+id+" broke");
+               e.printStackTrace();
+            }
+         }
          else
             throw new Exception("Error, Unknown unit type: "+ut);
       }
@@ -462,8 +528,15 @@ public class Rusher {
          if(!gc.unit(id).location().isInGarrison())
          {
             enemyUnits = toIDList(gc.senseNearbyUnitsByTeam(gc.unit(id).location().mapLocation(), 5000, enemyTeam));
-            return;
+            break;
          }
+      attackList.clear();
+      if(enemyUnits != null)
+         for(int id: enemyUnits)
+            attackList.add(unitPair(id));
+      if(attackList.size()==0)
+         for(int id: enemyInit.keySet())
+            attackList.add(enemyInit.get(id));
    }
    //END OF UNIT METHODS
    
@@ -474,21 +547,22 @@ public class Rusher {
          return null;
       if(regions[start.x][start.y]!=regions[end.x][end.y])
          throw new Exception("Different regions");
-      if(paths[start.x][start.y][end.x][end.y]!=null)
+      if(paths[start.x][start.y][end.x][end.y]!=null&&avoid==null)
          return paths[start.x][start.y][end.x][end.y];
       int[][] dist = new int[eWidth][eHeight];
+      boolean[][] used = new boolean[eWidth][eHeight];
       Pair[][] prev = new Pair[eWidth][eHeight];
       for(int x = 0; x < dist.length; x++)
          Arrays.fill(dist[x], -1);
       dist[start.x][start.y] = 0;
+      used[start.x][start.y] = true;
       LinkedList<Pair> q = new LinkedList<Pair>();
       q.add(start);
       Pair id = null;
       boolean pathFound = false;
-      while(!q.isEmpty())
+      cycle: while(!q.isEmpty())
       {
          id = q.remove();
-         //System.out.println(id);
          if(id.equals(end))
          {
             pathFound = true;
@@ -499,12 +573,17 @@ public class Rusher {
             try
             {
                Pair next = mapPair(eMapLoc[id.x][id.y].add(d));
-                     //System.out.println(d+" "+next+" : "+dist[next.x][next.y]+" "+regions[next.x][next.y]);
-               if(inBounds(next)&&dist[next.x][next.y]==-1&&regions[next.x][next.y]>0&&!next.equals(avoid))
+               if(inBounds(next))
                {
-                  dist[next.x][next.y] = dist[id.x][id.y]+1;
-                  prev[next.x][next.y] = id;
-                  q.add(next);
+               // if(avoid!=null)
+                  //System.out.println(id+" "+next+" : "+used[next.x][next.y]+" "+regions[next.x][next.y]);
+                  if(!used[next.x][next.y]&&regions[next.x][next.y]>0&&!next.equals(avoid))
+                  {
+                     dist[next.x][next.y] = dist[id.x][id.y]+1;
+                     prev[next.x][next.y] = id;
+                     q.add(next);
+                  }
+                  used[next.x][next.y] = true;
                }
             }
             catch(Exception e) {e.printStackTrace();}
@@ -560,6 +639,8 @@ public class Rusher {
    }
    public static Site initSite(Pair site) throws Exception
    {
+      if(!viableSite[site.x][site.y])
+         return null;
       int initCount = 0;
       int totalDist = 0;
       HashSet<Integer> initBuild = toIDList(gc.senseNearbyUnitsByTeam(eMapLoc[site.x][site.y], 20, myTeam));
@@ -570,8 +651,7 @@ public class Rusher {
       for(int r: toRemove)
          initBuild.remove(r);
       HashSet<Integer> ret = new HashSet<Integer>();
-      int blueID = -1;
-      int minDist = 0;
+      int minDist = -1;
       for(int id: initBuild)
       {
          Pair p = unitPair(id);
@@ -581,18 +661,15 @@ public class Rusher {
             dist = 1;
          else
             dist = paths[p.x][p.y][site.x][site.y].seq.size();
-         if(dist<=2)
+         if(dist<=3)
          {
             totalDist+=dist;
             ret.add(id);
-            if(blueID==-1||dist<minDist)
-            {
-               blueID = id;
+            if(minDist==-1||dist<minDist)
                minDist = dist;
-            }
          }
       }
-      return new Site(site, ret, blueID, totalDist);
+      return new Site(site, ret, totalDist);
    }
    public static Pair bestSite(Pair p)
    {
@@ -605,24 +682,38 @@ public class Rusher {
          for(Direction d: directions)
          {
             Pair site = mapPair(eMapLoc[cur.x][cur.y].add(d));
-            if(inBounds(site)&&!used[site.x][site.y])
+            if(inBounds(site)&&!used[site.x][site.y]&&regions[site.x][site.y]>0)
             {
-               if(moveable(site))
+               used[site.x][site.y] = true;
+               if(moveable(site)&&siteID[site.x][site.y]==-1&&(site.x+site.y)%2==siteParity&&viableSite[site.x][site.y])
                   return site;
-               if(regions[site.x][site.y]>0&&(site.x+site.y)%2==siteParity)
+               if(regions[site.x][site.y]>0)
                   q.add(site);
             }
          }
       }
       return null;
    }
+   public static Pair closest(Pair start, HashSet<Pair> list)
+   {
+      Pair best = null;
+      int bestDist = 0;
+      for(Pair p: list)
+      {
+         int dist = distance(start, p);
+         if(dist<bestDist||best==null)
+         {
+            best = p;
+            bestDist = dist;
+         }
+      }
+      return best;
+   }
    public static Pair bestAttack(int id)
    {
-      Pair p = null;
-      
-   
-   
-      return p;
+      Pair best = closest(unitPair(id), attackList);
+      System.out.println("Ranger "+id+" is targeting "+best);
+      return best;
    }
    //END OF MAP METHODS
    
@@ -687,7 +778,7 @@ public class Rusher {
       {
          if(k.size<bestScore)
             break;
-         if(!noKarbonite[k.loc.x][k.loc.y]&&!beingMined[k.loc.x][k.loc.y])
+         if(!noKarbonite[k.loc.x][k.loc.y]&&!usedMine[k.loc.x][k.loc.y])
          {
             paths[pos.x][pos.y][k.loc.x][k.loc.y] = findPath(pos, k.loc, null);
             if(paths[pos.x][pos.y][k.loc.x][k.loc.y]==null)
@@ -707,13 +798,15 @@ public class Rusher {
    //END OF KARBONITE-RELATED METHODS
    
    //HELPER METHODS
-   public static int bestUnitType(UnitType u1, UnitType u2)
+   public static int bestUnitType(Unit ua, Unit ub)
    {
+      UnitType u1 = ua.unitType();
+      UnitType u2 = ub.unitType();
       if(u1.equals(u2))
          return 0;
-      if(u1.equals(UnitType.Factory))
+      if(u1.equals(UnitType.Factory)&&ua.structureIsBuilt()!=0)
          return -1;
-      if(u2.equals(UnitType.Factory))
+      if(u2.equals(UnitType.Factory)&&ub.structureIsBuilt()!=0)
          return 1;
       if(u1.equals(UnitType.Knight))
          return -1;
@@ -726,6 +819,10 @@ public class Rusher {
       if(u1.equals(UnitType.Ranger))
          return -1;
       if(u2.equals(UnitType.Ranger))
+         return 1;
+      if(u1.equals(UnitType.Factory))
+         return -1;
+      if(u2.equals(UnitType.Factory))
          return 1;
       if(u1.equals(UnitType.Healer))
          return -1;
@@ -871,21 +968,13 @@ public class Rusher {
    }
    static class Task
    {
-   /* 
-      0: mining
-      1: building
-      2: producing
-      3: attack
-      4: heal
-   */
       int taskType;
       int[] typeOn = new int[10]; //lower value is higher priority, 0 means no priority
       int unitID;
       int maxStep = 1;
-   //task-specific data (if taks is off, then value is null, false, -1, etc)
+   //task-specific data (if task is off, then value is null, false, -1, etc)
       Pair buildTarget = null; //for building: target blueprint
       Pair moveTarget = null; //for moving: final destination
-      Pair attack = null; //for moving: final destination
       UnitType produceType = null; //for producing: type of robot
       UnitType buildType = null;
       Path detour = null; //for moving: if blocked, use this route
@@ -911,14 +1000,11 @@ public class Rusher {
       }
       public boolean startMoving(Pair target) throws Exception
       {
-         //System.out.println("Unit "+unitID+" has started moving");
          Pair curLoc = unitPair(unitID);
          paths[curLoc.x][curLoc.y][target.x][target.y] = findPath(curLoc, target, null);
          if(paths[curLoc.x][curLoc.y][target.x][target.y]==null)
             return false;
          moveTarget = target;
-         //System.out.println("Unit "+unitID+"'s path from "+unitPair(unitID)+" to "+moveTarget+" is:");
-         //System.out.println(paths[curLoc.x][curLoc.y][target.x][target.y]);
          return true;
       }
       public boolean stopMoving()
@@ -937,7 +1023,7 @@ public class Rusher {
          {
             Pair p = mapPair(eMapLoc[moveTarget.x][moveTarget.y].add(d));
             if(inBounds(p))
-               beingMined[p.x][p.y] = true;
+               usedMine[p.x][p.y] = true;
          }
          return true;
       }
@@ -948,15 +1034,19 @@ public class Rusher {
          stopMoving();
          return true;
       }
-      public boolean startBuilding(Pair p)
+      public boolean startBuilding(Pair p, UnitType ut) throws Exception
       {
+         System.out.println("The unit at "+unitPair(unitID)+" is going to build at "+p);
          typeOn[1] = maxStep++;
+         startMoving(p);
          buildTarget = p;
+         buildType = ut;
          return true;
       }
       public boolean stopBuilding()
       {
          typeOn[1] = 0;
+         stopMoving();
          buildTarget = null;
          return true;
       }
@@ -972,31 +1062,10 @@ public class Rusher {
          produceType = null;
          return true;
       }
-      public boolean startBlueprinting(Pair p, UnitType ut) throws Exception
-      {
-         if(p==null)
-            return false;
-         typeOn[3] = maxStep++;
-         buildTarget = p;
-         buildType = ut;
-         startMoving(p);
-         return true;
-      }
-      public boolean stopBlueprinting()
-      {
-         typeOn[3] = 0;
-         buildTarget = null;
-         buildType = null;
-         stopMoving();
-         return true;
-      }
-      public boolean startAttacking() throws Exception
+      public boolean startAttacking(Pair target) throws Exception
       {
          typeOn[4] = maxStep++;
-         int n = (int)(Math.random()*enemyInit.size());
-         for(int enemyID: enemyInit.keySet())
-            if(n--==0)
-               startMoving(enemyInit.get(enemyID));
+         startMoving(target);
          return true;
       }
       public boolean stopAttacking()
@@ -1021,8 +1090,9 @@ public class Rusher {
       0: mining
       1: building
       2: producing
-      3: attack
-      4: heal
+      3: blueprint
+      4: attack
+      5: heal
       */
       public int doTask() throws Exception
       {
@@ -1031,9 +1101,14 @@ public class Rusher {
          int status;
          switch(getTask()) {
             case 0:
-               System.out.println("unit "+unitID+" is at "+unitPair(unitID)+" and is mining "+moveTarget);
                if(noKarbonite[moveTarget.x][moveTarget.y])
-                  startMining(bestMine(unitID).loc);
+                  if(bestMine(unitID)!=null)
+                     startMining(bestMine(unitID).loc);
+                  else
+                  {
+                     stopMining();
+                     return -1;
+                  }
                status = mine(unitID);
                if(moveTarget.equals(p)&&status==-1)
                {
@@ -1043,9 +1118,11 @@ public class Rusher {
                }
                break;
             case 1:
+               if(siteID[buildTarget.x][buildTarget.y]==-1)
+                  siteID[buildTarget.x][buildTarget.y] = -2;
                if(eMapLoc[p.x][p.y].isAdjacentTo(eMapLoc[buildTarget.x][buildTarget.y]))
                   stopMoving();
-               status = build(unitID, buildTarget);
+               status = build(unitID, buildTarget, buildType);
                if(status==-2)
                   if(gc.isMoveReady(unitID))
                      for(Direction d: directions)
@@ -1053,12 +1130,14 @@ public class Rusher {
                            if(gc.canMove(unitID, d))
                            {
                               gc.moveRobot(unitID, d);
-                              status = build(unitID, buildTarget);
+                              status = blueprint(unitID, buildTarget, buildType);
                               break;
                            }
-               if(status==1)
+               if(status==1)  
                   stopBuilding();
-                  findNewWork(UnitType.Worker);
+               for(int factID: factories)
+                  if(gc.canRepair(unitID, factID))
+                     gc.repair(unitID, factID);
                break;
             case 2:
                produce(unitID, produceType);
@@ -1090,29 +1169,8 @@ public class Rusher {
                else
                   ret = -1;
                break;
-            case 3:
-               status = blueprint(unitID, buildTarget, buildType);
-               if(status==-2)
-                  if(gc.isMoveReady(unitID))
-                     for(Direction d: directions)
-                        if(!d.equals(Direction.Center))
-                           if(gc.canMove(unitID, d))
-                           {
-                              gc.moveRobot(unitID, d);
-                              status = blueprint(unitID, buildTarget, buildType);
-                              break;
-                           }
-               //System.out.println("unit "+unitID+" blueprint status = "+status);
-               if(status>=0)
-               {
-                  Pair temp = buildTarget;
-                  stopBlueprinting();
-                  startBuilding(temp);
-               }
-               break;
             case 4:
-               if(unitPair(unitID).equals(moveTarget))
-                  startAttacking();
+               startAttacking(bestAttack(unitID));
                attack(unitID);
                break;
             default:
@@ -1130,17 +1188,17 @@ public class Rusher {
    {
       Pair loc;
       HashSet<Integer> init;
-      int blueID;
       int dist;
-      public Site(Pair p, HashSet<Integer> ib, int b, int d)
+      public Site(Pair p, HashSet<Integer> ib, int d)
       {
          loc = p;
          init = ib;
-         blueID = b;
          dist = d;
       }
       public int compareTo(Site s)
       {
+         if(s==null)
+            return -1;
          if(s.init.size()!=init.size())
             return s.init.size()-init.size();
          return dist-s.dist;
