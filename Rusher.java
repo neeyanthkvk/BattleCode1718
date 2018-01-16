@@ -688,7 +688,7 @@ public class Rusher {
          for(Direction d: directions)
          {
             Pair site = mapPair(eMapLoc[cur.x][cur.y].add(d));
-            if(inBounds(site)&&!used[site.x][site.y])
+            if(inBounds(site)&&!used[site.x][site.y]&&regions[site.x][site.y]>0)
             {
                used[site.x][site.y] = true;
                if(moveable(site)&&siteID[site.x][site.y]==-1&&(site.x+site.y)%2==siteParity&&viableSite[site.x][site.y])
