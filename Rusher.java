@@ -31,6 +31,8 @@ public class Rusher {
    static HashSet<Integer> rangers;
    static HashSet<Integer> rockets;
    static HashSet<Integer> workers;
+   static int builderCount = 0;
+   static int minerCount = 0;
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
    static HashMap<Integer, Pair> enemyInit = new HashMap<Integer, Pair>();
    static HashSet<Integer> enemyUnits;
@@ -212,6 +214,21 @@ public class Rusher {
          
             for(int id: workers)
             {
+               if(gc.round()>1&&Math.random()<0.25&&builderCount/2<eWidth&&minerCount/2<eWidth)
+                  for(Direction d: directions)
+                     if(gc.canReplicate(id, d))
+                     {
+                        gc.replicate(id, d);
+                        int newID = gc.senseUnitAtLocation(gc.unit(id).location().mapLocation().add(d)).id();
+                        tasks.put(newID, new Task(newID));
+                        if(minerCount>builderCount)
+                        {
+                           tasks.get(newID).taskType = 1;
+                           builderCount++;
+                        }
+                        else
+                           minerCount++;
+                     }
                int task = tasks.get(id).getTask();
                if(task==-1)
                {
@@ -321,7 +338,7 @@ public class Rusher {
    public static int build(int id, Pair target, UnitType ut) 
    {
       Pair p = unitPair(id);
-      System.out.println("Unit at "+p+" is trying to build at "+target+" which has "+siteID[target.x][target.y]);
+      //System.out.println("Unit at "+p+" is trying to build at "+target+" which has "+siteID[target.x][target.y]);
       if(p.equals(target))
          return -2;
       if(siteID[target.x][target.y]==-1)
@@ -346,7 +363,7 @@ public class Rusher {
    public static int blueprint(int id, Pair target, UnitType ut)
    {
       Pair p = unitPair(id);
-      System.out.println("Unit at "+p+" is trying to blueprint at "+target);
+      //System.out.println("Unit at "+p+" is trying to blueprint at "+target);
       if(!eMapLoc[p.x][p.y].isAdjacentTo(eMapLoc[target.x][target.y]))
          return -5;
       Direction d = findDirection(p, target);
@@ -389,8 +406,8 @@ public class Rusher {
          return -1;
       if(!gc.canHarvest(id, best))
          return -2;
-      if(gc.karboniteAt(gc.unit(u.id).location().mapLocation().add(best)) == 0) {
-        return -1;      
+      if(gc.karboniteAt(gc.unit(u.id()).location().mapLocation().add(best)) == 0) {
+         return -1;      
       }
       gc.harvest(u.id(), best);
       return 0;
@@ -495,8 +512,20 @@ public class Rusher {
          else if(ut.equals(UnitType.Worker))
          {
             workers.add(id);
-            if(gc.round()>1&&tasks.get(id).buildTarget!=null&&siteID[unitPair(id).x][unitPair(id).y]==-1)
-               siteID[unitPair(id).x][unitPair(id).y]=-2;
+            try{
+               if(gc.round()>1)
+               {
+                  if(tasks.get(id).buildTarget!=null&&siteID[unitPair(id).x][unitPair(id).y]==-1)
+                     siteID[unitPair(id).x][unitPair(id).y]=-2;
+                  if(tasks.get(id).taskType==0)
+                     minerCount++;
+                  else
+                     builderCount++;
+               }
+            } catch(Exception e) {
+               System.out.println("unit "+id+" broke");
+               e.printStackTrace();
+            }
          }
          else
             throw new Exception("Error, Unknown unit type: "+ut);
