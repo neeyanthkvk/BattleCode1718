@@ -214,7 +214,7 @@ public class Rusher {
          
             for(int id: workers)
             {
-               if(gc.round()>1&&Math.random()<0.25&&builderCount/2<eWidth&&minerCount/2<eWidth)
+               if(gc.round()>1&&Math.random()<0.25&&(builderCount/2<eWidth||minerCount/2<eWidth))
                   for(Direction d: directions)
                      if(gc.canReplicate(id, d))
                      {
@@ -242,12 +242,6 @@ public class Rusher {
                      tasks.get(id).startBuilding(bestSite(unitPair(id)), UnitType.Factory);
                }
                int val = tasks.get(id).doTask();
-               if(task==0&&val==-1)
-               {
-                  Pair p = unitPair(id);
-                  //System.out.println(bestKarbAdj.get(regions[p.x][p.y]).size()+" regions left");
-                  tasks.get(id).startMining(bestMine(id).loc);
-               }
             }
             for(int id: factories)
             {
@@ -1110,6 +1104,11 @@ public class Rusher {
                if(noKarbonite[moveTarget.x][moveTarget.y])
                   if(bestMine(unitID)!=null)
                      startMining(bestMine(unitID).loc);
+                  else
+                  {
+                     stopMining();
+                     return -1;
+                  }
                status = mine(unitID);
                if(moveTarget.equals(p)&&status==-1)
                {
