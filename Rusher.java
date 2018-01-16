@@ -389,6 +389,9 @@ public class Rusher {
          return -1;
       if(!gc.canHarvest(id, best))
          return -2;
+      if(gc.karboniteAt(gc.unit(u.id).location().mapLocation().add(best)) == 0) {
+        return -1;      
+      }
       gc.harvest(u.id(), best);
       return 0;
    }
