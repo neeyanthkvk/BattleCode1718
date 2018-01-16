@@ -1136,6 +1136,9 @@ public class Rusher {
                            }
                if(status==1)  
                   stopBuilding();
+               for(int factID: factories)
+                  if(gc.canRepair(unitID, factID))
+                     gc.repair(unitID, factID);
                break;
             case 2:
                produce(unitID, produceType);
@@ -1168,8 +1171,7 @@ public class Rusher {
                   ret = -1;
                break;
             case 4:
-               if(unitPair(unitID).equals(moveTarget))
-                  startAttacking(bestAttack(unitID));
+               startAttacking(bestAttack(unitID));
                attack(unitID);
                break;
             default:
