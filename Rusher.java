@@ -400,7 +400,7 @@ public class Rusher {
       if(prev.equals(target)||target==null)
          return 1;
       Path pa = findPath(prev, target, null);  
-      if(tasks.get(id).detour!=null && tasks.get(id).size() != 0)
+      if(tasks.get(id).detour!=null && tasks.get(id).detour.size() != 0)
       {
          pa = tasks.get(id).detour;
          System.out.println("Currently using detour");
