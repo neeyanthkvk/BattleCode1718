@@ -22,9 +22,9 @@ public class Rusher {
    static int mHeight = (int) mMap.getHeight();
    static Team myTeam = gc.team();
    static Team enemyTeam;
-   static boolean isSiteInitialized = false;
    static Random random = new Random(1);
    static boolean rocketResearched = false;
+   static boolean[][] occupied = new boolean[eWidth][eHeight];
    
    //Unit Info
    static HashSet<Integer> myInit = new HashSet<Integer>();
@@ -228,8 +228,8 @@ public class Rusher {
             for(int y = 0; y < eHeight; y++)
                if((x+y)%2!=siteParity)
                   viableSite[x][y] = false;
-         isSiteInitialized = true;
          System.out.println("Best site is "+bestSite.loc);
+         System.out.println("best site workers are ");
          
       //initializes bestKarbAdj
          System.out.println("Finding best mining location");
@@ -269,7 +269,7 @@ public class Rusher {
             System.out.println("Earth Round "+gc.round()+": ");
             System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
             updateUnits();
-            
+                     
             for(int id: myUnits)
             {
                if(gc.unit(id).location().isInGarrison())
@@ -281,14 +281,16 @@ public class Rusher {
          
             for(int id: workers)
             {
-               if(gc.round()>1&&random.nextDouble()<0.1&&(builderCount<Math.sqrt(eWidth*eHeight)/2||minerCount<Math.sqrt(eWidth*eHeight)/2))
+               int limit = (int)Math.sqrt(eWidth*eHeight)/2;
+               if(gc.round()>1&&random.nextDouble()<0.1&&(minerCount<=limit||builderCount<=1.5*limit))
                   for(Direction d: diagonals)
                      if(gc.canReplicate(id, d))
                      {
                         gc.replicate(id, d);
                         int newID = gc.senseUnitAtLocation(gc.unit(id).location().mapLocation().add(d)).id();
                         tasks.put(newID, new Task(newID));
-                        if(minerCount>builderCount)
+                        //tasks.get(newID).taskType = 1;
+                        if(minerCount>2*builderCount)
                         {
                            tasks.get(newID).taskType = 1;
                            builderCount++;
@@ -309,6 +311,7 @@ public class Rusher {
                      tasks.get(id).startBuilding(bestSite(unitPair(id)), UnitType.Factory);
                }
                int val = tasks.get(id).doTask();
+            
             }
             for(int id: factories)
             {
@@ -483,29 +486,33 @@ public class Rusher {
       Pair target = tasks.get(id).moveTarget;
       if(prev.equals(target)||target==null)
          return 1;
-      Path pa = findPath(prev, target, null); 
+      Path pa = tasks.get(id).path;
       if(pa==null)
-      {
-         System.out.println(prev+" vs "+target);
-         System.out.println(findPath(prev, target, null));
-      }
+         return -2;
       if(gc.canMove(id, pa.seq.getFirst()))
          if(gc.isMoveReady(id))
          {
             gc.moveRobot(id, pa.seq.getFirst());
             Pair p = mapPair(eMapLoc[prev.x][prev.y].add(pa.seq.getFirst()));
-            paths[p.x][p.y][target.x][target.y] = pa.copy();
-            paths[p.x][p.y][target.x][target.y].seq.removeFirst();
+            tasks.get(id).path.seq.removeFirst();
+            if(tasks.get(id).path.seq.size()==0)
+               tasks.get(id).path = null;
             return 0;
          }
          else
             return -1;
+      else 
+      {
+         tasks.get(id).path = findPath(prev, target, true, false);
+         move(id);
+      }
       return 0;
    }
    public static void updateUnits() throws Exception
    {
       if(gc.round()>325)
          rocketResearched = true;
+      occupied = new boolean[eWidth][eHeight];
       myUnits = toIDList(gc.myUnits());
       healers = new HashSet<Integer>();
       factories = new HashSet<Integer>();
@@ -519,6 +526,11 @@ public class Rusher {
             siteID[x][y] = -1;
       for(int id: myUnits)
       {
+         if(!inGarrison(id))
+         {
+            Pair p = unitPair(id);
+            occupied[p.x][p.y] = true;
+         }
          UnitType ut = gc.unit(id).unitType();
          if(ut.equals(UnitType.Factory))
          {
@@ -573,16 +585,16 @@ public class Rusher {
    //END OF UNIT METHODS
    
    //MAP METHODS
-   public static Path findPath(Pair start, Pair end, Pair avoid)
+   public static Path findPath(Pair start, Pair end, boolean avoid, boolean useSites)
    {
       if(start.equals(end))
          return null;
       if(regions[start.x][start.y]!=regions[end.x][end.y])
       {
-         System.out.println("Different regions");
+         System.out.println("Different regions "+start+" to "+end);
          return null;
       }
-      if(paths[start.x][start.y][end.x][end.y]!=null&&avoid==null)
+      if(paths[start.x][start.y][end.x][end.y]!=null&&!avoid)
          return paths[start.x][start.y][end.x][end.y];
       boolean[][] used = new boolean[eWidth][eHeight];
       Pair[][] prev = new Pair[eWidth][eHeight];
@@ -608,7 +620,7 @@ public class Rusher {
                {
                // if(avoid!=null)
                   //System.out.println(id+" "+next+" : "+used[next.x][next.y]+" "+regions[next.x][next.y]);
-                  if(!used[next.x][next.y]&&regions[next.x][next.y]!=0&&(!viableSite[next.x][next.y]||!isSiteInitialized)&&!next.equals(avoid))
+                  if(!used[next.x][next.y]&&regions[next.x][next.y]!=0&&(!viableSite[next.x][next.y]||!useSites)&&!next.equals(avoid)&&!occupied[next.x][next.y])
                   {
                      prev[next.x][next.y] = id;
                      q.add(next);
@@ -627,7 +639,7 @@ public class Rusher {
          p.seq.addFirst(findDirection(prev[id.x][id.y], id));
          id = prev[id.x][id.y];
       }
-      if(avoid==null)
+      if(!avoid)
          paths[start.x][start.y][end.x][end.y] = p;
       return p;
    }
@@ -655,7 +667,7 @@ public class Rusher {
    }
    public static Site initSite(Pair site) throws Exception
    {
-      if(!viableSite[site.x][site.y])
+      if(!viableSite[site.x][site.y]&&regions[site.x][site.y]!=0)
          return null;
       int initCount = 0;
       int totalDist = 0;
@@ -679,9 +691,7 @@ public class Rusher {
             int bestDist = 0;
             for(Pair target: possible)
             {
-               paths[cur.x][cur.y][target.x][target.y] = findPath(cur, target, null);
-               if(paths[cur.x][cur.y][target.x][target.y]==null)
-                  System.out.println(cur+" to "+target);
+               paths[cur.x][cur.y][target.x][target.y] = findPath(cur, target, false, false);
                int d = paths[cur.x][cur.y][target.x][target.y].seq.size();
                if(bestLoc==null||d<bestDist)
                {
@@ -689,7 +699,7 @@ public class Rusher {
                   bestDist = d;
                }
             }
-            dist = paths[cur.x][cur.y][site.x][site.y].seq.size();
+            dist = bestDist;
          }
          if(dist<=3)
          {
@@ -728,10 +738,15 @@ public class Rusher {
       VecMapLocation minVec = gc.allLocationsWithin(eMapLoc[target.x][target.y], minRange);
       VecMapLocation maxVec = gc.allLocationsWithin(eMapLoc[target.x][target.y], maxRange);
       HashSet<Pair> ret = new HashSet<Pair>();
-      for(int x = 0; x < maxVec.size(); x++)
-         ret.add(mapPair(maxVec.get(x)));
-      for(int x = 0; x < minVec.size(); x++)
-         ret.remove(mapPair(minVec.get(x)));
+      cycle: for(int x = 0; x < maxVec.size(); x++)
+      {
+         for(int y = 0; y < minVec.size(); y++)
+            if(minVec.get(y).equals(maxVec.get(x)))
+               continue cycle;
+         Pair p = mapPair(maxVec.get(x));
+         if(regions[p.x][p.y]!=0)
+            ret.add(mapPair(maxVec.get(x)));
+      }
       return ret;
    }
    public static Pair bestAttack(int id)
@@ -744,10 +759,6 @@ public class Rusher {
       HashSet<Pair> all = new HashSet<Pair>();
       for(Pair en: attackList)
          all.addAll(locWithin(en, minRange, maxRange));
-      System.out.println("min "+minRange);
-      System.out.println("max "+maxRange);
-      for(Pair p: attackList)
-         System.out.println(p+" ");
       if(all.size()==0)
          return null;
       boolean[][] used = new boolean[eWidth][eHeight];
@@ -861,7 +872,7 @@ public class Rusher {
             break;
          if(!noKarbonite[k.loc.x][k.loc.y]&&!usedMine[k.loc.x][k.loc.y]&&!viableSite[k.loc.x][k.loc.y])
          {
-            paths[pos.x][pos.y][k.loc.x][k.loc.y] = findPath(pos, k.loc, null);
+            paths[pos.x][pos.y][k.loc.x][k.loc.y] = findPath(pos, k.loc, true, true);
             if(paths[pos.x][pos.y][k.loc.x][k.loc.y]==null)
                continue;
             int pathSize = paths[pos.x][pos.y][k.loc.x][k.loc.y].seq.size();
@@ -879,6 +890,10 @@ public class Rusher {
    //END OF KARBONITE-RELATED METHODS
    
    //HELPER METHODS
+   public static boolean inGarrison(int id)
+   {
+      return gc.unit(id).location().isInGarrison();
+   }
    public static boolean isCardinal(Pair p1, Pair p2)
    {
       MapLocation m1 = eMapLoc[p1.x][p1.y];
@@ -1080,7 +1095,7 @@ public class Rusher {
       Pair moveTarget = null; //for moving: final destination
       UnitType produceType = null; //for producing: type of robot
       UnitType buildType = null;
-      Path detour = null; //for moving: if blocked, use this route
+      Path path = null;
       boolean halting = false;
       public Task(int id)
       {
@@ -1092,21 +1107,14 @@ public class Rusher {
          str+=unitID;
          str+="\n Target: ";
          str+=moveTarget;
-         str+="\n Detour: ";
-         str+=detour;
          return str;
-      }
-      public boolean setDetour(Pair avoid) throws Exception
-      {
-         detour = findPath(unitPair(unitID), moveTarget, avoid);
-         return detour!=null;
       }
       public boolean startMoving(Pair target) throws Exception
       {
          if(target==null)
             return false;
          Pair curLoc = unitPair(unitID);
-         paths[curLoc.x][curLoc.y][target.x][target.y] = findPath(curLoc, target, null);
+         path = paths[curLoc.x][curLoc.y][target.x][target.y] = findPath(curLoc, target, true, false);
          if(paths[curLoc.x][curLoc.y][target.x][target.y]==null)
             return false;
          moveTarget = target;
@@ -1115,7 +1123,7 @@ public class Rusher {
       public boolean stopMoving()
       {
          moveTarget = null;
-         detour = null;
+         path = null;
          return true;
       }
       public boolean startMining(Pair target) throws Exception 
@@ -1151,7 +1159,7 @@ public class Rusher {
          int bestDist = 0;
          for(Pair target: possible)
          {
-            paths[cur.x][cur.y][target.x][target.y] = findPath(cur, target, null);
+            paths[cur.x][cur.y][target.x][target.y] = findPath(cur, target, true, true);
             if(paths[cur.x][cur.y][target.x][target.y]==null)
                System.out.println(cur+" to "+target);
             int dist = paths[cur.x][cur.y][target.x][target.y].seq.size();
