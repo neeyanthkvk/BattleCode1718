@@ -295,6 +295,7 @@ public class Rusher {
                         if(minerCount>2*builderCount)
                         {
                            tasks.get(newID).taskType = 1;
+                           tasks.get(newID).startBuilding(tasks.get(id).buildTarget, UnitType.Factory);
                            builderCount++;
                         }
                         else
@@ -323,10 +324,10 @@ public class Rusher {
             }
             for(int id: rangers)
             {
-               if(Math.random()<0.1)
-                  tasks.get(id).startLoading();
                if(gc.unit(id).location().isInGarrison())
                   continue;
+               if(random.nextDouble()<0.1)
+                  tasks.get(id).startLoading();
                //System.out.println("ranger "+id);
                if(tasks.get(id).getTask()==-1)
                {
@@ -1370,7 +1371,8 @@ public class Rusher {
                   ret = -1;
                break;
             case 4:
-               startAttacking(bestAttack(unitID));
+               if(random.nextDouble()<0.2)
+                  startAttacking(bestAttack(unitID));
                attack(unitID);
                break;
             case 6:
