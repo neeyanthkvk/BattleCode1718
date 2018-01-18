@@ -958,8 +958,10 @@ public class Rusher {
    {
       UnitType u1 = ua.unitType();
       UnitType u2 = ub.unitType();
-      if(u1.equals(u2))
-         return 0;
+      if(u1.equals(UnitType.Mage))
+         return -1;
+      if(u2.equals(UnitType.Mage))
+         return 1;
       if(u1.equals(UnitType.Factory)&&ua.structureIsBuilt()!=0)
          return -1;
       if(u2.equals(UnitType.Factory)&&ub.structureIsBuilt()!=0)
@@ -967,10 +969,6 @@ public class Rusher {
       if(u1.equals(UnitType.Knight))
          return -1;
       if(u2.equals(UnitType.Knight))
-         return 1;
-      if(u1.equals(UnitType.Mage))
-         return -1;
-      if(u2.equals(UnitType.Mage))
          return 1;
       if(u1.equals(UnitType.Ranger))
          return -1;
