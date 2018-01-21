@@ -5,7 +5,6 @@ import java.io.*;
 public class Player {
 
    //Basic Info 
-   static long startTime = System.currentTimeMillis();
    static PrintWriter out;
    static int maxRound = 1000;   // the number of rounds
    static Planet earth = Planet.Earth;
@@ -55,10 +54,8 @@ public class Player {
    static MapLocation[][] mMapLoc = new MapLocation[mWidth][mHeight];
    static int[][] karbDep = new int[eWidth][eHeight];//amount of karbonite in the square
    static int[][] karbAdj = new int[eWidth][eHeight];//sum of karbonite on and adjacent to the square
-   static HashMap<Integer, PriorityQueue<KarbAdjacent>> bestKarbAdj = new HashMap<Integer, PriorityQueue<KarbAdjacent>>();
    static int[][] regions = new int[eWidth][eHeight];
    static int regionCount = 0;
-   static boolean[][] noKarbonite = new boolean[eWidth][eHeight];
    static boolean[][] usedMine = new boolean[eWidth][eHeight];
    static boolean[][] viableSite = new boolean[eWidth][eHeight];
    static boolean[] open = new boolean[512];
@@ -211,7 +208,8 @@ public class Player {
                   regions[x][y] = -1*regions[x][y];
          System.out.println("Finished finding regions");
          
-      //initializes openCount
+      //initializes adjCount
+         System.out.println("Finding adjacent counts");
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
                for(Direction d: adjacent)
@@ -222,11 +220,13 @@ public class Player {
                }
          
       //initializes moveDist
+         System.out.println("Finding moveDist");
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
                moveDist[x][y] = initPath(new Pair(x, y));
-         
+               
       //finds viable sites
+         System.out.println("Finding viable sites");
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
             {
@@ -238,21 +238,12 @@ public class Player {
                viableSite[x][y] = open[index];
             }
          
-      //initializes bestKarbAdj
-         System.out.println("Finding best mining location");
-         for(int id: myUnits)
-            try {
-               Pair p = unitPair(id);
-               if(bestKarbAdj.get(regions[p.x][p.y])==null)
-                  bestKarbAdj.put(regions[p.x][p.y], countMaxKarbAdj(unitPair(id)));
-            } 
-            catch(Exception e) {e.printStackTrace();}
-         System.out.println("Finished finding best mining location");
-           
          int c = 0;
          for(int id: myUnits)
             if(c++%2==0)
-               tasks.get(id).taskType = 1;     
+               tasks.get(id).taskType = 1; 
+            else
+               tasks.get(id).taskType = 0;    
       //end of initialization
       } 
       catch(Exception e) {e.printStackTrace();}
@@ -271,37 +262,20 @@ public class Player {
          try
          {
             System.out.println("Earth Round "+gc.round()+": ");
-            System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
+            //System.out.println("Time left: "+gc.getTimeLeftMs());
             updateUnits();
                      
-            for(int id: myUnits)
-            {
-               if(gc.unit(id).location().isInGarrison())
-                  continue;
-               Pair p = unitPair(id);
-               if(!noKarbonite[p.x][p.y]&&countKarbAdj(unitPair(id), true)==0)
-                  noKarbonite[p.x][p.y] = true;
-            }
-         
             for(int id: workers)
             {
+               Pair start = unitPair(id);
                int task = tasks.get(id).getTask();
                if(task==-1)
                {
                   int type = tasks.get(id).taskType;
-                  if(type==0)
-                     if(bestMine(id)!=null)
-                     {                        
-                        tasks.get(id).startMining(bestMine(id).loc);
-                        bestKarbAdj.remove(bestMine(id));
-                     }
-                     else
-                        tasks.get(id).taskType = 1;
                   if(type==1)
                      tasks.get(id).startBuilding(bestSite(unitPair(id)), UnitType.Factory);
                }
                int val = tasks.get(id).doTask();
-            
             }
             for(int id: factories)
             {
@@ -331,7 +305,7 @@ public class Player {
       while(gc.round()<=maxRound)
       {
          System.out.println("Mars Round: "+gc.round());
-         System.out.println("Time used: "+(System.currentTimeMillis()-startTime));
+         //System.out.println("Time left: "+gc.getTimeLeftMs());
          gc.nextTurn();
       }
    }
@@ -422,9 +396,6 @@ public class Player {
          return -1;
       if(!gc.canHarvest(id, best))
          return -2;
-      if(gc.karboniteAt(gc.unit(u.id()).location().mapLocation().add(best)) == 0) {
-         return -1;      
-      }
       gc.harvest(u.id(), best);
       return 0;
    }
@@ -433,9 +404,12 @@ public class Player {
       Unit u = gc.unit(id);
       Pair start = unitPair(id);
       Pair target = tasks.get(id).moveTarget;
-      if(target==null||gc.isMoveReady(id))
+      if(target==null||!gc.isMoveReady(id))
          return -1;
+      System.out.println("moving from "+start+" to "+target);
       HashSet<Direction> possible = nextMove(start, target, tasks.get(id).targetDist);
+      if(possible==null)
+         return -1;
       for(Direction d: possible)
          if(gc.canMove(id, d))
          {
@@ -446,7 +420,16 @@ public class Player {
    }
    public static void updateUnits() throws Exception
    {
-      if(gc.round()>325)
+      for(int x = 0; x < eWidth; x++)
+         for(int y = 0; y < eHeight; y++)
+            if(gc.canSenseLocation(eMapLoc[x][y]))
+            {
+               karbDep[x][y] = (int) gc.karboniteAt(eMapLoc[x][y]);
+            }
+            else
+               karbDep[x][y] = Math.min(karbDep[x][y], (int) eMap.initialKarboniteAt(eMapLoc[x][y]));
+   
+      if(gc.researchInfo().getLevel(UnitType.Rocket)>0)
          rocketResearched = true;
       occupied = new boolean[eWidth][eHeight];
       myUnits = toIDList(gc.myUnits());
@@ -512,6 +495,7 @@ public class Player {
          else
             throw new Exception("Error, Unknown unit type: "+ut);
       }
+      enemyUnits.clear();
       for(int id: myUnits)
          if(!gc.unit(id).location().isInGarrison())
          {
@@ -521,17 +505,17 @@ public class Player {
             break;
          }
       attackList.clear();
-      if(enemyUnits!=null)
-         for(int id: enemyUnits)
-         {
-            attackList.add(unitPair(id));
-            if(gc.unit(id).unitType().equals(UnitType.Knight))
-               knightDefense = (int)gc.unit(id).knightDefense();
-         }
-      for(int id: enemyInit.keySet())
-         attackList.add(enemyInit.get(id));
+      for(int id: enemyUnits)
+      {
+         attackList.add(unitPair(id));
+         if(gc.unit(id).unitType().equals(UnitType.Knight))
+            knightDefense = (int)gc.unit(id).knightDefense();
+      }
+      if(attackList.size()==0)
+         for(int id: enemyInit.keySet())
+            attackList.add(enemyInit.get(id));
       for(Pair p: attackList)
-         System.out.println(p);
+         System.out.println("enemy is at "+p);
    }
    //END OF UNIT METHODS
    
@@ -548,22 +532,47 @@ public class Player {
    }
    public static HashSet<Direction> nextMove(Pair start, Pair end, int goal)
    {
-      if(start.equals(end))
+      if(end==null||moveDist[start.x][start.y][end.x][end.y]==goal)
          return null;
-      if(moveDist[start.x][start.y][end.x][end.y]==-1)
-         return null;
-      HashSet<Direction> possible = new HashSet<Direction>();
       int curDist = moveDist[start.x][start.y][end.x][end.y];
+      int direction = 1;
+      if(goal<moveDist[start.x][start.y][end.x][end.y])
+         direction = -1;
+         
+      if(moveDist[start.x][start.y][end.x][end.y]==-1)
+         if(curDist>goal)
+         {
+            System.out.println("Cannot go from "+start+" to "+end);
+            return null;
+         }
+         else
+            direction = -1;
+            
+      HashSet<Direction> possible = new HashSet<Direction>();
       for(Direction d: adjacent)
       {
          Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
-         if(moveDist[next.x][next.y][end.x][end.y]==curDist-1)
+         if(inBounds(next)&&moveDist[next.x][next.y][end.x][end.y]==curDist+direction)
             possible.add(d);
       }
       return possible;
    }
    public static int[][] initPath(Pair start)
    {
+      HashSet<Direction>[][] moves = new HashSet[eWidth][eHeight];
+      for(int x = 0; x < eWidth; x++)
+         for(int y = 0; y < eHeight; y++)
+         {
+            moves[x][y] = new HashSet<Direction>();
+            if(regions[x][y]!=0)
+               for(Direction d: adjacent)
+               {
+                  Pair next = mapPair(eMapLoc[x][y].add(d));
+                  if(inBounds(next)&&regions[next.x][next.y]!=0)
+                     moves[x][y].add(d);
+               }
+         }
+   
       int[][] dist = new int[eWidth][eHeight];
       boolean[][] used = new boolean[eWidth][eHeight];
       for(int x = 0; x < eWidth; x++)
@@ -578,19 +587,14 @@ public class Player {
       cycle: while(!q.isEmpty())
       {
          Pair cur = q.remove();
-         for(Direction d: directions)
+         for(Direction d: moves[cur.x][cur.y])
          {
             Pair next = mapPair(eMapLoc[cur.x][cur.y].add(d));
-            if(inBounds(next)&&!used[next.x][next.y])
-            {
-               if(regions[next.x][next.y]!=0)
-               {
-                  dist[next.x][next.y] = dist[cur.x][cur.y]+1;
-                  q.add(next);
-               }
-               used[next.x][next.y] = true;
-            }
+            dist[next.x][next.y] = dist[cur.x][cur.y]+1;
+            q.add(next);
+            moves[next.x][next.y].remove(oppositeDirection(d));
          }
+         moves[cur.x][cur.y].clear();
       }   
       return dist;
    }
@@ -654,23 +658,20 @@ public class Player {
    public static Pair closestEnemy(Pair start, int minRange, int maxRange)
    {
       Pair best = null;
-      int bestScore = -100000;
+      int bestScore = 100000;
       for(Pair en: attackList)
       {
          HashSet<Pair> possible = locWithin(en, minRange, maxRange);
-         int score = 0;
          int min = Integer.MAX_VALUE;
          for(Pair end: possible)
             if(moveDist[start.x][start.y][end.x][end.y]!=-1)
             {
                min = Math.min(min, moveDist[start.x][start.y][end.x][end.y]);
-               score++;
             }
-         score-=min;
-         if(score>bestScore)
+         if(min<bestScore)
          {
             best = en;
-            bestScore = score;
+            bestScore = min;
          }
       }
       return best;
@@ -679,6 +680,7 @@ public class Player {
    {
       HashSet<Integer> killed = new HashSet<Integer>();
       if(enemyUnits!=null)
+      {
          for(int en: enemyUnits)
          {
             HashSet<Integer> canAttack = new HashSet<Integer>();
@@ -723,25 +725,51 @@ public class Player {
                   if(gc.canSenseUnit(en))
                      gc.attack(at, en);
                   else
+                  {
                      System.out.println("Killed enemy unit at "+enLoc);
+                     break;
+                  }
                for(int mo: movers.keySet())
                   if(gc.canSenseUnit(en))
-                  {
-                     gc.moveRobot(mo, movers.get(mo));
-                     gc.attack(mo, en);
-                  }
-                  else
-                     System.out.println("Killed enemy unit at "+enLoc);
+                     if(gc.canMove(mo, movers.get(mo)))
+                     {
+                        gc.moveRobot(mo, movers.get(mo));
+                        gc.attack(mo, en);
+                     }
+                     else
+                     {
+                        System.out.println("Killed enemy unit at "+enLoc);
+                        break;
+                     }         
             }
          }
+      }
       for(int id: rangers)
       {
          if(gc.unit(id).location().isInGarrison())
             continue;
-         tasks.get(id).moveTarget = closestEnemy(unitPair(id), (int)gc.unit(id).attackRange(), (int)gc.unit(id).rangerCannotAttackRange());
-         System.out.println(tasks.get(id).moveTarget);
+         Pair cloEn = closestEnemy(unitPair(id), (int)gc.unit(id).rangerCannotAttackRange(), (int)gc.unit(id).attackRange());
+         if(enemyUnits.size()==0)
+            tasks.get(id).startMoving(cloEn, 0);
+         else
+            tasks.get(id).startMoving(cloEn, 4);
+         System.out.println("ranger at "+unitPair(id)+" going to "+tasks.get(id).moveTarget);
          move(id);
       }
+      for(int id: rangers)
+         if(!gc.unit(id).location().isInGarrison()&&gc.isAttackReady(id))
+         {
+            VecUnit vu = gc.senseNearbyUnitsByTeam(eMapLoc[unitPair(id).x][unitPair(id).y], gc.unit(id).attackRange(), enemyTeam);
+            TreeSet<Enemy> leftovers = new TreeSet<Enemy>();
+            for(int x = 0; x < vu.size(); x++)
+               leftovers.add(new Enemy(vu.get(x)));
+            for(Enemy e: leftovers)
+               if(gc.canAttack(id, e.unit.id()))
+               {
+                  gc.attack(id, e.unit.id());
+                  break;
+               }
+         }
    }
    //END OF MAP METHODS
    
@@ -795,35 +823,56 @@ public class Player {
       }
    }
    //return best mine given known current conditions
-   public static KarbAdjacent bestMine(int id) throws Exception
+   public static Pair bestMine(int id) throws Exception
    {
       Pair start = unitPair(id);
-      if(bestKarbAdj.get(regions[start.x][start.y]).size()==0)
-         return null;
-      KarbAdjacent best = null;
-      int bestPathSize = 0;
-      int bestScore = 0;
-      for(KarbAdjacent k: bestKarbAdj.get(regions[start.x][start.y]))
+      LinkedList<Pair> q = new LinkedList<Pair>();
+      boolean[][] used = new boolean[eWidth][eHeight];
+      q.add(start);
+      used[start.x][start.y] = true;
+      while(!q.isEmpty())
       {
-         if(k.size<bestScore)
-            break;
-         if(!noKarbonite[k.loc.x][k.loc.y]&&!usedMine[k.loc.x][k.loc.y]&&siteID[k.loc.x][k.loc.y]==-1)
+         Pair cur = q.remove();
+         if(karbDep[cur.x][cur.y]>0&&!usedMine[cur.x][cur.y]&&siteID[cur.x][cur.y]==-1)
+            return cur;
+         for(Direction d: adjacent)
          {
-            int pathSize = moveDist[k.loc.x][k.loc.y][start.x][start.y];
-            int score = k.size-pathSize*((int)gc.unit(id).workerHarvestAmount()*2);
-            if(best==null||(score==bestScore&&pathSize<bestPathSize)||score>bestScore)
+            Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
+            if(inBounds(next)&&!used[next.x][next.y])
             {
-               best = k;
-               bestPathSize = pathSize;
-               bestScore = score;
+               q.add(next);
+               used[next.x][next.y] = true;
             }
          }
       }
-      return best;
+      return null;
    }
    //END OF KARBONITE-RELATED METHODS
    
    //HELPER METHODS
+   public static boolean safeFrom(int id, Pair start)
+   {
+      UnitType ut = gc.unit(id).unitType();
+      if(ut.equals(UnitType.Healer))
+         return false;
+      if(ut.equals(UnitType.Rocket))
+         return false;
+      if(ut.equals(UnitType.Factory))
+         return false;
+      if(ut.equals(UnitType.Worker))
+         return false;
+      HashSet<Pair> set = new HashSet<Pair>();
+      int range = (int) gc.unit(id).attackRange();
+      int minRange = 0;
+      double cooldown = (double)gc.unit(id).movementCooldown();
+      if(ut.equals(UnitType.Ranger))
+         minRange = (int) gc.unit(id).rangerCannotAttackRange();
+      set = locWithin(unitPair(id), minRange, range);
+      for(Pair p: set)
+         if(moveDist[p.x][p.y][start.x][start.y]!=-1&&moveDist[p.x][p.y][start.x][start.y]*cooldown<25)
+            return false;
+      return true;
+   }
    public static boolean inGarrison(int id)
    {
       return gc.unit(id).location().isInGarrison();
@@ -849,13 +898,6 @@ public class Player {
    public static int distance(Pair p1, Pair p2)
    {
       return (p1.x-p2.x)*(p1.x-p2.x)+(p1.y-p2.y)*(p1.y-p2.y);
-   }
-   public static boolean moveable(Pair p)
-   {
-      if(!gc.hasUnitAtLocation(eMapLoc[p.x][p.y]))
-         return true;
-      Unit u = gc.senseUnitAtLocation(eMapLoc[p.x][p.y]);
-      return u==null||u.team().equals(enemyTeam)||isStructure(u.id());
    }
    public static boolean isStructure(int id)
    {
@@ -1092,26 +1134,17 @@ public class Player {
       public int doTask() throws Exception
       {
          Pair start = unitPair(unitID);
+         if(moveTarget!=null)
+            move(unitID);
          int ret = 0;
          int status;
          switch(getTask()) {
             case 0:
-               if(noKarbonite[moveTarget.x][moveTarget.y])
-                  if(bestMine(unitID)!=null)
-                  {
-                     startMining(bestMine(unitID).loc);
-                     bestKarbAdj.remove(bestMine(unitID));
-                  }
-                  else
-                  {
-                     return -1;
-                  }
+               moveTarget = bestMine(unitID);
+               if(moveTarget==null)
+               {}
+               System.out.println("worker at "+start+" is going to mine at "+moveTarget);
                status = mine(unitID);
-               if(moveTarget.equals(start)&&status==-1)
-               {
-                  ret = -1;
-                  noKarbonite[start.x][start.y] = true;
-               }
                break;
             case 1:
                if(moveTarget==null)
@@ -1166,8 +1199,6 @@ public class Player {
                if(unitType(unitID).equals(UnitType.Worker))
                   mine(unitID);
          }
-         if(moveTarget!=null)
-            move(unitID);
          return ret;
       }
    }
@@ -1191,7 +1222,7 @@ public class Player {
          return dist-s.dist;
       }
    }
-   static class Enemy 
+   static class Enemy implements Comparable<Enemy>
    {
       Unit unit;
       int attackers;
@@ -1215,7 +1246,7 @@ public class Player {
          if(ut.equals(UnitType.Ranger))
             score+=1000;
          if(ut.equals(UnitType.Healer))
-            score+=100;
+            score+=1000;
          if(ut.equals(UnitType.Worker))
             score+=10;
          if(ut.equals(UnitType.Rocket))
@@ -1224,6 +1255,7 @@ public class Player {
             if(unit.structureIsBuilt()!=0)
                score+=10*gc.round();
          }  
+         score-=u.health();
       }
       public Enemy(Unit u, int a, int m, boolean k)
       {
@@ -1268,9 +1300,9 @@ public class Player {
          if(kill)
             score*=2;  
       }
-      public int compare(Enemy e1, Enemy e2)
+      public int compareTo(Enemy e)
       {
-         return e2.score-e1.score;
+         return e.score-score;
       }
    }
 }
