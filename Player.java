@@ -500,7 +500,8 @@ public class Player {
                   else
                      builderCount++;
                }
-            } catch(Exception e) {
+            } 
+            catch(Exception e) {
                System.out.println("unit "+id+" broke");
                e.printStackTrace();
             }
