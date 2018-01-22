@@ -453,9 +453,13 @@ public class Player {
       rangers = new HashSet<Integer>();
       rockets = new HashSet<Integer>();
       workers = new HashSet<Integer>();
+      
       for(int x = 0; x < eWidth; x++)
          for(int y = 0; y < eHeight; y++)
+         {
             siteID[x][y] = -1;
+            usedMine[x][y] = false;
+         }
       for(int id: myUnits)
       {
          if(!inGarrison(id))
@@ -493,12 +497,18 @@ public class Player {
             try{
                if(gc.round()>1)
                {
-                  if(tasks.get(id).moveTarget!=null)
-                     siteID[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]=-2;
                   if(tasks.get(id).taskType==0)
+                  {
                      minerCount++;
+                     if(tasks.get(id).moveTarget!=null)
+                        usedMine[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]=true;
+                  }
                   else
+                  {
                      builderCount++;
+                     if(tasks.get(id).moveTarget!=null)
+                        siteID[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]=-2;
+                  }
                }
             } 
             catch(Exception e) {
@@ -644,6 +654,30 @@ public class Player {
    }
    public static Pair bestSite(Pair p)
    {
+      int minID = -1;
+      int dist = 0;
+      for(int id: rockets)
+      {
+         Pair loc = unitPair(id);
+         if(moveDist[loc.x][loc.y][p.x][p.y]<5)
+            if(minID==-1||moveDist[p.x][p.y][loc.x][loc.y]<dist)
+            {
+               minID = id;
+               dist = moveDist[p.x][p.y][loc.x][loc.y];
+            }
+      }
+      for(int id: factories)
+      {
+         Pair loc = unitPair(id);
+         if(moveDist[loc.x][loc.y][p.x][p.y]<5)
+            if(minID==-1||moveDist[p.x][p.y][loc.x][loc.y]<dist)
+            {
+               minID = id;
+               dist = moveDist[p.x][p.y][loc.x][loc.y];
+            }
+      }
+      if(minID!=-1)
+         return unitPair(minID);
       LinkedList<Pair> q = new LinkedList<Pair>();
       boolean[][] used = new boolean[eWidth][eHeight];
       q.add(p);
