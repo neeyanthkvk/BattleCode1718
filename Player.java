@@ -283,6 +283,8 @@ public class Player {
                if(task==-1)
                {
                   int type = tasks.get(id).taskType;
+                  if(type==0)
+                     tasks.get(id).startMining(bestMine(unitPair(id)));
                   if(type==1)
                      tasks.get(id).startBuilding(bestSite(unitPair(id)), UnitType.Factory);
                }
@@ -842,9 +844,8 @@ public class Player {
       }
    }
    //return best mine given known current conditions
-   public static Pair bestMine(int id) throws Exception
+   public static Pair bestMine(Pair start) throws Exception
    {
-      Pair start = unitPair(id);
       LinkedList<Pair> q = new LinkedList<Pair>();
       boolean[][] used = new boolean[eWidth][eHeight];
       q.add(start);
@@ -869,7 +870,8 @@ public class Player {
    //END OF KARBONITE-RELATED METHODS
    
    //HELPER METHODS
-   public static boolean safeFrom(int id, Pair start)
+   //determines whether or not an enemy poses a threat to a building at this site
+   public static boolean vulnerable(int id, Pair start)
    {
       UnitType ut = gc.unit(id).unitType();
       if(ut.equals(UnitType.Healer))
@@ -1095,6 +1097,7 @@ public class Player {
          if(target==null)
          {
             System.out.println(unitPair(unitID)+" to "+target+" is null");
+            return false;
          }
          typeOn[0] = maxStep++;
          startMoving(target, 0);
@@ -1159,15 +1162,18 @@ public class Player {
          int status;
          switch(getTask()) {
             case 0:
-               moveTarget = bestMine(unitID);
-               if(moveTarget==null)
-               {}
-               System.out.println("worker at "+start+" is going to mine at "+moveTarget);
-               status = mine(unitID);
-               break;
+               if(!startMining(bestMine(start)))
+               {
+                  startBuilding(bestSite(start), UnitType.Factory);
+               }
+               else 
+               {
+                  System.out.println("worker at "+start+" is going to mine at "+moveTarget);
+                  status = mine(unitID);
+                  break;
+               }
             case 1:
-               if(moveTarget==null)
-                  moveTarget = bestSite(start);
+               moveTarget = bestSite(start);
                if(siteID[moveTarget.x][moveTarget.y]==-1)
                   siteID[moveTarget.x][moveTarget.y] = -2;
                status = build(unitID, moveTarget, buildType);
