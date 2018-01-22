@@ -29,7 +29,7 @@ public class Player {
    static boolean rocketResearched = false;
    static boolean[][] occupied = new boolean[eWidth][eHeight];
    static boolean[][] launchLoc = new boolean[mWidth][mHeight];
-   static int[][][][] moveDist = new int[eWidth][eHeight][eWidth][eHeight];
+   static int[][][][] moveDist = new int[eWidth][eHeight][][];
    static int[][] adjCount = new int[eWidth][eHeight];
    
    //Unit Info
@@ -223,7 +223,18 @@ public class Player {
          System.out.println("Finding moveDist");
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
+            {
                moveDist[x][y] = initPath(new Pair(x, y));
+               if(x==3&&y==0)
+                  for(int b = 0; b < eHeight; b++)
+                  {
+                     for(int a = 0; a < eWidth; a++)
+                     {
+                        System.out.print(moveDist[x][y][a][b]+" ");
+                     }
+                     System.out.println();
+                  }
+            }
                
       //finds viable sites
          System.out.println("Finding viable sites");
@@ -559,6 +570,9 @@ public class Player {
    }
    public static int[][] initPath(Pair start)
    {
+      if(moveDist[start.x][start.y]!=null)
+         return moveDist[start.x][start.y];
+      moveDist[start.x][start.y] = new int[eWidth][eHeight];
       HashSet<Direction>[][] moves = new HashSet[eWidth][eHeight];
       for(int x = 0; x < eWidth; x++)
          for(int y = 0; y < eHeight; y++)
@@ -590,9 +604,14 @@ public class Player {
          for(Direction d: moves[cur.x][cur.y])
          {
             Pair next = mapPair(eMapLoc[cur.x][cur.y].add(d));
-            dist[next.x][next.y] = dist[cur.x][cur.y]+1;
-            q.add(next);
-            moves[next.x][next.y].remove(oppositeDirection(d));
+            if(dist[next.x][next.y]==-1)
+            {
+               dist[next.x][next.y] = dist[cur.x][cur.y]+1;
+               q.add(next);
+               moves[next.x][next.y].remove(oppositeDirection(d));
+               //if(start.x==3&&start.y==0)
+                  //System.out.println("cur.x :"+cur.x+" cur.y: "+cur.y+" d: "+d);
+            }
          }
          moves[cur.x][cur.y].clear();
       }   
