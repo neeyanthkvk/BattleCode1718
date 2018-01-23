@@ -27,7 +27,6 @@ public class Player {
    static Team enemyTeam;
    static Random random = new Random(1);
    static boolean rocketResearched = false;
-   static boolean[][] occupied = new boolean[eWidth][eHeight];
    static boolean[][] launchLoc = new boolean[mWidth][mHeight];
    static int[][][][] moveDist = new int[eWidth][eHeight][][];
    static int[][] adjCount = new int[eWidth][eHeight];
@@ -252,9 +251,15 @@ public class Player {
          int c = 0;
          for(int id: myUnits)
             if(c++%2==0)
+            {
                tasks.get(id).taskType = 1; 
+               builderCount++;
+            }
             else
-               tasks.get(id).taskType = 0;    
+            {
+               tasks.get(id).taskType = 0; 
+               minerCount++;
+            }
       //end of initialization
       } 
       catch(Exception e) {e.printStackTrace();}
@@ -264,7 +269,10 @@ public class Player {
          earth();
       else
          mars();
-      out.close();
+      while(true)
+      {
+         gc.nextTurn();
+      }
    }
    public static void earth() {
       //rounds 1-1000
@@ -445,32 +453,90 @@ public class Player {
       gc.harvest(u.id(), best);
       return 0;
    }
-   public static int move(int id)
+   public static int move(int id, boolean push, HashSet<Integer> prevPush)
    {
+      if(prevPush==null)
+         prevPush = new HashSet<Integer>();
+      if(prevPush.contains(id))
+         return -1;
+      prevPush.add(id);
       Unit u = gc.unit(id);
       Pair start = unitPair(id);
       Pair target = tasks.get(id).moveTarget;
-      if(target==null||!gc.isMoveReady(id))
+      if((target==null&&!push)||!gc.isMoveReady(id))
          return -1;
-      System.out.println("moving from "+start+" to "+target);
+      //System.out.println("moving from "+start+" to "+target);
       HashSet<Direction> possible = nextMove(start, target, tasks.get(id).targetDist);
-      if(possible==null)
-         return -1;
-      for(Direction d: possible)
-         if(gc.canMove(id, d))
+      if(possible!=null)
+      {
+         for(Direction d: possible)
+            if(gc.canMove(id, d))
+            {
+               Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
+               if(siteID[dest.x][dest.y]!=-1)
+                  continue;
+               gc.moveRobot(id, d);
+               return 0;
+            }
+         for(Direction d: possible)
          {
             Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
             if(siteID[dest.x][dest.y]!=-1)
                continue;
-            gc.moveRobot(id, d);
-            break;
+            try {
+               if(gc.canSenseLocation(eMapLoc[dest.x][dest.y]))
+               {
+                  Unit block = gc.senseUnitAtLocation(eMapLoc[dest.x][dest.y]);
+                  if(block==null||block.team().equals(enemyTeam))
+                     continue;
+                  if(move(block.id(), true, prevPush)==-1)
+                     continue;
+               }
+            } catch(Exception e)
+            {
+               System.out.println("move exception");
+            }
+            if(gc.canMove(id, d))
+            {
+               gc.moveRobot(id, d);
+               return 0;
+            }
          }
-      return 0;
+      }
+      if(push)
+         for(Direction d: adjacent)
+            if(gc.canMove(id, d))
+            {
+               Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
+               if(siteID[dest.x][dest.y]!=-1)
+                  continue;
+               try {
+                  if(gc.canSenseLocation(eMapLoc[dest.x][dest.y]))
+                  {
+                     Unit block = gc.senseUnitAtLocation(eMapLoc[dest.x][dest.y]);
+                     if(block==null||block.team().equals(enemyTeam))
+                        continue;
+                     if(move(block.id(), true, prevPush)==-1)
+                        continue;
+                  }
+               } catch(Exception e)
+               {
+                  System.out.println("move exception");
+               }
+               if(gc.canMove(id, d))
+               {
+                  gc.moveRobot(id, d);
+                  return 0;
+               }
+            }
+      return -1;
    }
    public static void replicate(int id)
    {
-      double minerProb = 2/(minerCount*minerCount);
-      double builderProb = 2/(builderCount*builderCount);
+      //System.out.println(minerCount);
+      //System.out.println(builderCount);
+      //double minerProb = 2/(minerCount*minerCount);
+      //double builderProb = 2/(builderCount*builderCount);
       double val = random.nextDouble();
       if(gc.karbonite()<30||gc.unit(id).abilityHeat()>=10)//REPLICATE COST
          return;
@@ -478,7 +544,7 @@ public class Player {
          // return;
       boolean noMiners = minerCount==0;
       boolean noBuilders = builderCount==0;
-      boolean toRep = (tasks.get(id).taskType==0&&minerCount<4)||(tasks.get(id).taskType==1&&builderCount<4);
+      boolean toRep = (tasks.get(id).taskType==0&&minerCount<5)||(tasks.get(id).taskType==1&&builderCount<5);
       if(noBuilders||noMiners||toRep)
       {
          Pair start = unitPair(id);
@@ -505,35 +571,29 @@ public class Player {
             gc.replicate(id, best);
             MapLocation repLoc = eMapLoc[start.x][start.y].add(best);
             int newID = gc.senseUnitAtLocation(repLoc).id();
-            System.out.println("oldid "+id+" vs newid "+newID);
+            //System.out.println("oldid "+id+" vs newid "+newID);
+            tasks.put(newID, new Task(newID));
             if(noMiners)
             {
-               tasks.put(newID, new Task(newID));
                tasks.get(newID).taskType = 0;
-               tasks.get(newID).doTask();
                minerCount++;
             }
             else if(noBuilders)
             {
-               tasks.put(newID, new Task(newID));
                tasks.get(newID).taskType = 1;
-               tasks.get(newID).doTask();
                builderCount++;
             }
             else if(tasks.get(id).taskType==0)
             {
-               tasks.put(newID, new Task(newID));
                tasks.get(newID).taskType = 0;
-               tasks.get(newID).doTask();
                minerCount++;
             }
             else
             {
-               tasks.put(newID, new Task(newID));
                tasks.get(newID).taskType = 1;
-               tasks.get(newID).doTask();
                builderCount++;
             }
+            tasks.get(newID).doTask();
          }
          else 
             System.out.println("replication fail at "+start);
@@ -552,7 +612,6 @@ public class Player {
    
       if(gc.researchInfo().getLevel(UnitType.Rocket)>0)
          rocketResearched = true;
-      occupied = new boolean[eWidth][eHeight];
       myUnits = toIDList(gc.myUnits());
       healers = new HashSet<Integer>();
       factories = new HashSet<Integer>();
@@ -561,7 +620,8 @@ public class Player {
       rangers = new HashSet<Integer>();
       rockets = new HashSet<Integer>();
       workers = new HashSet<Integer>();
-      
+      minerCount = 0;
+      builderCount = 0;
       for(int x = 0; x < eWidth; x++)
          for(int y = 0; y < eHeight; y++)
          {
@@ -570,11 +630,6 @@ public class Player {
          }
       for(int id: myUnits)
       {
-         if(!inGarrison(id))
-         {
-            Pair p = unitPair(id);
-            occupied[p.x][p.y] = true;
-         }
          UnitType ut = gc.unit(id).unitType();
          if(ut.equals(UnitType.Factory))
          {
@@ -625,8 +680,6 @@ public class Player {
                e.printStackTrace();
             }
          }
-         else
-            throw new Exception("Error, Unknown unit type: "+ut);
       }
       enemyUnits.clear();
       for(int id: myUnits)
@@ -647,8 +700,6 @@ public class Player {
       if(attackList.size()==0)
          for(int id: enemyInit.keySet())
             attackList.add(enemyInit.get(id));
-      for(Pair p: attackList)
-         System.out.println("enemy is at "+p);
    }
    //END OF UNIT METHODS
    
@@ -793,7 +844,6 @@ public class Player {
       }
       if(minID!=-1)
          return unitPair(minID);
-      System.out.println("start "+p);
       LinkedList<Pair> q = new LinkedList<Pair>();
       boolean[][] used = new boolean[eWidth][eHeight];
       q.add(p);
@@ -806,17 +856,26 @@ public class Player {
             if(inBounds(site)&&!used[site.x][site.y]&&regions[site.x][site.y]!=0)
             {
                used[site.x][site.y] = true;
-               System.out.println("site "+site);
                if(siteID[site.x][site.y]==-1)
                   if(viableSite[site.x][site.y])
-                     if(!occupied[site.x][site.y])
-                     {
-                        for(int fact: factories)
-                           if(gc.unit(fact).location().mapLocation().distanceSquaredTo(eMapLoc[site.x][site.y])<=2)
-                              continue cycle;
-                        System.out.println("found site "+site);
-                        return site;
+                  {
+                     for(int fact: factories)
+                        if(gc.unit(fact).location().mapLocation().distanceSquaredTo(eMapLoc[site.x][site.y])<=2)
+                           continue cycle;
+                     try {
+                        if(gc.canSenseLocation(eMapLoc[site.x][site.y]))
+                        {
+                           Unit toMove = gc.senseUnitAtLocation(eMapLoc[site.x][site.y]);
+                           if(toMove!=null)
+                              move(toMove.id(), true, null);
+                        }
                      }
+                     catch(Exception e)
+                     {
+                        System.out.println("bestsite exception");
+                     }
+                     return site;
+                  }
                q.add(site);
             }
          }
@@ -924,19 +983,20 @@ public class Player {
             }
          }
       }
-      for(int id: rangers)
-      {
-         if(gc.unit(id).location().isInGarrison())
-            continue;
-         Pair cloEn = closestEnemy(unitPair(id), (int)gc.unit(id).rangerCannotAttackRange(), (int)gc.unit(id).attackRange());
-         if(tasks.get(id).getTask()!=6)
-            if(enemyUnits.size()==0)
-               tasks.get(id).startMoving(cloEn, 0);
-            else
-               tasks.get(id).startMoving(cloEn, 4);
-         System.out.println("ranger at "+unitPair(id)+" going to "+tasks.get(id).moveTarget);
-         move(id);
-      }
+      if(rangers.size()>10)
+         for(int id: rangers)
+         {
+            if(gc.unit(id).location().isInGarrison())
+               continue;
+            Pair cloEn = closestEnemy(unitPair(id), (int)gc.unit(id).rangerCannotAttackRange(), (int)gc.unit(id).attackRange());
+            if(tasks.get(id).getTask()!=6)
+               if(enemyUnits.size()==0)
+                  tasks.get(id).startMoving(cloEn, 0);
+               else
+                  tasks.get(id).startMoving(cloEn, 4);
+            System.out.println("ranger at "+unitPair(id)+" going to "+tasks.get(id).moveTarget);
+            move(id, false, null);
+         }
       for(int id: rangers)
          if(!gc.unit(id).location().isInGarrison()&&gc.isAttackReady(id))
          {
@@ -1330,10 +1390,10 @@ public class Player {
                startBuilding(bestSite(unitPair(unitID)), UnitType.Factory);
          }
          if(moveTarget!=null)
-            move(unitID);
+            move(unitID, false, null);
          int ret = 0;
          int status;
-         System.out.println("pos "+start+" "+getTask());
+         //System.out.println("pos "+start+" "+getTask());
          switch(getTask()) {
             case 0:
                if(!startMining(bestMine(unitID)))
@@ -1343,15 +1403,13 @@ public class Player {
                }
                else 
                {
-                  System.out.println("worker at "+start+" is going to mine at "+moveTarget);
+                  //System.out.println("worker at "+start+" is going to mine at "+moveTarget);
                   status = mine(unitID);
                   replicate(unitID);
                   break;
                }
             case 1:
-               System.out.println(start+" buildingtask");
                startBuilding(bestSite(unitPair(unitID)), UnitType.Factory);
-               System.out.println("move target is "+moveTarget);
                if(siteID[moveTarget.x][moveTarget.y]==-1)
                   siteID[moveTarget.x][moveTarget.y] = -2;
                status = build(unitID, moveTarget, buildType);
@@ -1390,7 +1448,7 @@ public class Player {
                   ret = -1;
                break;
             case 6:
-               move(unitID);
+            
             default:
                {
                   if(unitType(unitID).equals(UnitType.Worker))
