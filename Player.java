@@ -396,6 +396,8 @@ public class Player {
    {
       if(rocketResearched&&random.nextDouble()<(gc.round()/750)&&factories.size()>rockets.size())
          ut = UnitType.Rocket;
+      if(factories.size()>=5)
+         ut = UnitType.Rocket;
       Pair p = unitPair(id);
       //System.out.println("Unit at "+p+" is trying to blueprint at "+target);
       if(!eMapLoc[p.x][p.y].isAdjacentTo(eMapLoc[target.x][target.y]))
@@ -467,41 +469,75 @@ public class Player {
    }
    public static void replicate(int id)
    {
-      double minerProb = 16/(workers.size()*workers.size()*workers.size());
-      double builderProb = 16/(workers.size()*workers.size()*workers.size());
-      if(random.nextDouble()>minerProb||gc.karbonite()<30||gc.unit(id).abilityHeat()>=10) //REPLICATE COST
+      double minerProb = 2/(minerCount*minerCount);
+      double builderProb = 2/(builderCount*builderCount);
+      double val = random.nextDouble();
+      if(gc.karbonite()<30||gc.unit(id).abilityHeat()>=10)//REPLICATE COST
          return;
-      Pair start = unitPair(id);
-      Pair target = tasks.get(id).moveTarget;
-      int targetDist = tasks.get(id).targetDist;
-      moveDist[target.x][target.y] = initPath(target);
-      Direction best = null;
-      int bestDist = 0;
-      for(Direction d: adjacent)
-         if(gc.canReplicate(id, d))
-         {
-            Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
-            if(siteID[next.x][next.y]==-1)
+      // if(val>minerProb||val>builderProb)
+         // return;
+      boolean noMiners = minerCount==0;
+      boolean noBuilders = builderCount==0;
+      boolean toRep = (tasks.get(id).taskType==0&&minerCount<4)||(tasks.get(id).taskType==1&&builderCount<4);
+      if(noBuilders||noMiners||toRep)
+      {
+         Pair start = unitPair(id);
+         Pair target = tasks.get(id).moveTarget;
+         int targetDist = tasks.get(id).targetDist;
+         moveDist[target.x][target.y] = initPath(target);
+         Direction best = null;
+         int bestDist = 0;
+         for(Direction d: adjacent)
+            if(gc.canReplicate(id, d))
             {
-               if(best==null||Math.abs(moveDist[target.x][target.y][next.x][next.y]-targetDist)<Math.abs(bestDist-targetDist))
+               Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
+               if(siteID[next.x][next.y]==-1)
                {
-                  best = d;
-                  bestDist = moveDist[target.x][target.y][next.x][next.y];
+                  if(best==null||Math.abs(moveDist[target.x][target.y][next.x][next.y]-targetDist)<Math.abs(bestDist-targetDist))
+                  {
+                     best = d;
+                     bestDist = moveDist[target.x][target.y][next.x][next.y];
+                  }
                }
             }
+         if(best!=null)
+         {
+            gc.replicate(id, best);
+            MapLocation repLoc = eMapLoc[start.x][start.y].add(best);
+            int newID = gc.senseUnitAtLocation(repLoc).id();
+            System.out.println("oldid "+id+" vs newid "+newID);
+            if(noMiners)
+            {
+               tasks.put(newID, new Task(newID));
+               tasks.get(newID).taskType = 0;
+               tasks.get(newID).doTask();
+               minerCount++;
+            }
+            else if(noBuilders)
+            {
+               tasks.put(newID, new Task(newID));
+               tasks.get(newID).taskType = 1;
+               tasks.get(newID).doTask();
+               builderCount++;
+            }
+            else if(tasks.get(id).taskType==0)
+            {
+               tasks.put(newID, new Task(newID));
+               tasks.get(newID).taskType = 0;
+               tasks.get(newID).doTask();
+               minerCount++;
+            }
+            else
+            {
+               tasks.put(newID, new Task(newID));
+               tasks.get(newID).taskType = 1;
+               tasks.get(newID).doTask();
+               builderCount++;
+            }
          }
-      if(best!=null)
-      {
-         gc.replicate(id, best);
-         MapLocation repLoc = eMapLoc[start.x][start.y].add(best);
-         int newID = gc.senseUnitAtLocation(repLoc).id();
-         System.out.println("oldid "+id+" vs newid "+newID);
-         tasks.put(newID, new Task(newID));
-         tasks.get(newID).taskType = tasks.get(id).taskType;
-         tasks.get(newID).doTask();
+         else 
+            System.out.println("replication fail at "+start);
       }
-      else 
-         System.out.println("replication fail at "+start);
    }
    public static void updateUnits() throws Exception
    {
@@ -1303,6 +1339,7 @@ public class Player {
                if(!startMining(bestMine(unitID)))
                {
                   startBuilding(bestSite(start), UnitType.Factory);
+                  taskType = 1;
                }
                else 
                {
