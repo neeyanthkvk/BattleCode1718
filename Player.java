@@ -299,15 +299,6 @@ public class Player {
                try
                {
                   Pair start = unitPair(id);
-                  int task = tasks.get(id).getTask();
-                  if(task==-1)
-                  {
-                     int type = tasks.get(id).taskType;
-                     if(type==0)
-                        tasks.get(id).startMining(bestMine(id));
-                     if(type==1)
-                        tasks.get(id).startBuilding(bestSite(unitPair(id)), UnitType.Factory);
-                  }
                   int val = tasks.get(id).doTask();
                }
                catch(Exception e)
@@ -375,9 +366,9 @@ public class Player {
    //worker id, structure id, -2 means on top of site, -1 means too far away, 0 means build success, 1 means structure is finished
    public static int build(int id, Pair target, UnitType ut) 
    {
-      Pair p = unitPair(id);
+      Pair start = unitPair(id);
       //System.out.println("Unit at "+p+" is trying to build at "+target+" which has "+siteID[target.x][target.y]);
-      if(p.equals(target))
+      if(start.equals(target))
          return -2;
       if(siteID[target.x][target.y]==-1)
       {
@@ -390,7 +381,10 @@ public class Player {
       if(gc.unit(sID).structureIsBuilt()!=0)
          return 1;
       if(gc.canBuild(id, sID))
+      {
+         System.out.println(start+" building "+sID);
          gc.build(id, sID);
+      }
       else
          return -1;
       if(gc.unit(sID).structureIsBuilt()!=0)
@@ -463,10 +457,51 @@ public class Player {
       for(Direction d: possible)
          if(gc.canMove(id, d))
          {
+            Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
+            if(siteID[dest.x][dest.y]!=-1)
+               continue;
             gc.moveRobot(id, d);
             break;
          }
       return 0;
+   }
+   public static void replicate(int id)
+   {
+      double minerProb = 16/(workers.size()*workers.size()*workers.size());
+      double builderProb = 16/(workers.size()*workers.size()*workers.size());
+      if(random.nextDouble()>minerProb||gc.karbonite()<30||gc.unit(id).abilityHeat()>=10) //REPLICATE COST
+         return;
+      Pair start = unitPair(id);
+      Pair target = tasks.get(id).moveTarget;
+      int targetDist = tasks.get(id).targetDist;
+      moveDist[target.x][target.y] = initPath(target);
+      Direction best = null;
+      int bestDist = 0;
+      for(Direction d: adjacent)
+         if(gc.canReplicate(id, d))
+         {
+            Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
+            if(siteID[next.x][next.y]==-1)
+            {
+               if(best==null||Math.abs(moveDist[target.x][target.y][next.x][next.y]-targetDist)<Math.abs(bestDist-targetDist))
+               {
+                  best = d;
+                  bestDist = moveDist[target.x][target.y][next.x][next.y];
+               }
+            }
+         }
+      if(best!=null)
+      {
+         gc.replicate(id, best);
+         MapLocation repLoc = eMapLoc[start.x][start.y].add(best);
+         int newID = gc.senseUnitAtLocation(repLoc).id();
+         System.out.println("oldid "+id+" vs newid "+newID);
+         tasks.put(newID, new Task(newID));
+         tasks.get(newID).taskType = tasks.get(id).taskType;
+         tasks.get(newID).doTask();
+      }
+      else 
+         System.out.println("replication fail at "+start);
    }
    public static void updateUnits() throws Exception
    {
@@ -544,7 +579,8 @@ public class Player {
                   {
                      builderCount++;
                      if(tasks.get(id).moveTarget!=null)
-                        siteID[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]=-2;
+                        if(siteID[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]==-1)
+                           siteID[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]=-2;
                   }
                }
             } 
@@ -728,7 +764,7 @@ public class Player {
       while(!q.isEmpty())
       {
          Pair cur = q.remove();
-         for(Direction d: adjacent)
+         cycle: for(Direction d: adjacent)
          {
             Pair site = mapPair(eMapLoc[cur.x][cur.y].add(d));
             if(inBounds(site)&&!used[site.x][site.y]&&regions[site.x][site.y]!=0)
@@ -739,6 +775,9 @@ public class Player {
                   if(viableSite[site.x][site.y])
                      if(!occupied[site.x][site.y])
                      {
+                        for(int fact: factories)
+                           if(gc.unit(fact).location().mapLocation().distanceSquaredTo(eMapLoc[site.x][site.y])<=2)
+                              continue cycle;
                         System.out.println("found site "+site);
                         return site;
                      }
@@ -929,7 +968,7 @@ public class Player {
       }
    }
    //return best mine given known current conditions
-   public static Pair bestMine(int id) throws Exception
+   public static Pair bestMine(int id)
    {
       Pair start = unitPair(id);
       LinkedList<Pair> q = new LinkedList<Pair>();
@@ -945,7 +984,7 @@ public class Player {
                   return cur;
          for(Direction d: adjacent)
          {
-            Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
+            Pair next = mapPair(eMapLoc[cur.x][cur.y].add(d));
             if(inBounds(next)&&!used[next.x][next.y])
             {
                q.add(next);
@@ -953,6 +992,7 @@ public class Player {
             }
          }
       }
+      System.out.println("bestmine not found");
       return null;
    }
    //END OF KARBONITE-RELATED METHODS
@@ -1184,11 +1224,11 @@ public class Player {
          targetDist = goal;
          return true;
       }
-      public boolean startMining(Pair target) throws Exception 
+      public boolean startMining(Pair target)
       {
          if(target==null)
          {
-            System.out.println(unitPair(unitID)+" to "+target+" is null");
+            System.out.println(unitPair(unitID)+" to "+target+" is switching tasks");
             return false;
          }
          typeOn[0] = maxStep++;
@@ -1196,7 +1236,7 @@ public class Player {
          usedMine[target.x][target.y] = unitID;
          return true;
       }
-      public boolean startBuilding(Pair site, UnitType ut) throws Exception
+      public boolean startBuilding(Pair site, UnitType ut)
       {
          if(gc.round()>325&&Math.random()<0.2)
             ut = UnitType.Rocket;
@@ -1243,9 +1283,16 @@ public class Player {
       5: heal
       6: load
       */
-      public int doTask() throws Exception
+      public int doTask()
       {
          Pair start = unitPair(unitID);
+         if(getTask()==-1)
+         {
+            if(taskType==0)
+               startMining(bestMine(unitID));
+            if(taskType==1)
+               startBuilding(bestSite(unitPair(unitID)), UnitType.Factory);
+         }
          if(moveTarget!=null)
             move(unitID);
          int ret = 0;
@@ -1261,9 +1308,11 @@ public class Player {
                {
                   System.out.println("worker at "+start+" is going to mine at "+moveTarget);
                   status = mine(unitID);
+                  replicate(unitID);
                   break;
                }
             case 1:
+               System.out.println(start+" buildingtask");
                startBuilding(bestSite(unitPair(unitID)), UnitType.Factory);
                System.out.println("move target is "+moveTarget);
                if(siteID[moveTarget.x][moveTarget.y]==-1)
@@ -1272,6 +1321,7 @@ public class Player {
                for(int factID: factories)
                   if(gc.canRepair(unitID, factID))
                      gc.repair(unitID, factID);
+               replicate(unitID);
                break;
             case 2:
                produce(unitID, produceType);
