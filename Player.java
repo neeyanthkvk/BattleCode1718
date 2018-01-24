@@ -32,6 +32,7 @@ public class Player {
    static int[][] adjCount = new int[eWidth][eHeight];
    
    //Unit Info
+   static int activeRangers = 0;
    static HashSet<Integer> myInit = new HashSet<Integer>();
    static HashSet<Integer> myUnits;
    static HashSet<Integer> healers;
@@ -41,6 +42,7 @@ public class Player {
    static HashSet<Integer> rangers;
    static HashSet<Integer> rockets;
    static HashSet<Integer> workers;
+   static HashSet<Integer> hasReplicated = new HashSet<Integer>();
    static int builderCount = 0;
    static int minerCount = 0;
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
@@ -363,6 +365,7 @@ public class Player {
    {
       if(gc.canProduceRobot(id, ut))
       {
+    	 if(activeRangers > 20) return -3;
          gc.produceRobot(id, ut);
          return 0;
       }
@@ -700,6 +703,7 @@ public class Player {
       if(attackList.size()==0)
          for(int id: enemyInit.keySet())
             attackList.add(enemyInit.get(id));
+      activeRangers = rangers.size();
    }
    //END OF UNIT METHODS
    
@@ -1334,7 +1338,7 @@ public class Player {
       }
       public boolean startBuilding(Pair site, UnitType ut)
       {
-         if(gc.round()>325&&Math.random()<0.2)
+         if(gc.round()>325&&Math.random()<0.9)
             ut = UnitType.Rocket;
          Pair cur = unitPair(unitID);
          //System.out.println("The unit at "+unitPair(unitID)+" is going to build at "+site);
@@ -1409,7 +1413,8 @@ public class Player {
                   break;
                }
             case 1:
-               startBuilding(bestSite(unitPair(unitID)), UnitType.Factory);
+               Pair tempp = bestSite(unitPair(unitID));	 
+               startBuilding(tempp, UnitType.Factory);
                if(siteID[moveTarget.x][moveTarget.y]==-1)
                   siteID[moveTarget.x][moveTarget.y] = -2;
                status = build(unitID, moveTarget, buildType);
@@ -1447,8 +1452,16 @@ public class Player {
                else
                   ret = -1;
                break;
-            case 6:
-            
+            case 7:
+            	startBuilding(bestSite(unitPair(unitID)), UnitType.Rocket);
+                if(siteID[moveTarget.x][moveTarget.y]==-1)
+                   siteID[moveTarget.x][moveTarget.y] = -2;
+                status = build(unitID, moveTarget, buildType);
+                for(int factID: factories)
+                   if(gc.canRepair(unitID, factID))
+                      gc.repair(unitID, factID);
+                replicate(unitID);
+                break;
             default:
                {
                   if(unitType(unitID).equals(UnitType.Worker))
