@@ -4,7 +4,7 @@ import bc.*;
 import java.util.*;
 import java.io.*;
 @SuppressWarnings("unchecked")
-public class Player {
+ public class Player {
 
    //Basic Info 
    static PrintWriter out;
@@ -1615,3 +1615,4 @@ class Pair
    }
 }
 //END OF ADDITIONAL CLASSES
+
