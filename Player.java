@@ -30,7 +30,7 @@ import java.io.*;
    static Random random = new Random(1);
    static boolean rocketResearched = false;
    static boolean[][] launchLoc = new boolean[mWidth][mHeight];
-   static int[][][][] moveDist = new int[eWidth][eHeight][][];
+   static int[][][][] moveDist = new int[eWidth][eHeight][eWidth][eHeight];
    static int[][] adjCount = new int[eWidth][eHeight];
    
    //Unit Info
@@ -43,7 +43,6 @@ import java.io.*;
    static HashSet<Integer> rangers;
    static HashSet<Integer> rockets;
    static HashSet<Integer> workers;
-   static int activeRangers = 0;
    static int builderCount = 0;
    static int minerCount = 0;
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
@@ -128,7 +127,7 @@ import java.io.*;
                Pair p = q.remove();
                for(Direction d: directions)
                {
-                  Pair next = mapPair(eMapLoc[p.x][p.y].add(d));
+                  Pair next = addDirection(p, d);
                   if(next.x>=0&&next.x<3&&next.y>=0&&next.y<3)
                      if(array[next.x*3+next.y])
                      {
@@ -204,6 +203,7 @@ import java.io.*;
                   unreachable.add(regions[x][y]);
                } 
                catch(Exception e) {e.printStackTrace();}
+               
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
                if(unreachable.contains(regions[x][y]))
@@ -216,27 +216,57 @@ import java.io.*;
             for(int y = 0; y < eHeight; y++)
                for(Direction d: adjacent)
                {
-                  Pair p = mapPair(eMapLoc[x][y].add(d));
+                  Pair p = addDirection(new Pair(x, y), d);
                   if(inBounds(p)&&regions[p.x][p.y]!=0)
                      adjCount[p.x][p.y]++;
                }
          
       //initializes moveDist
          System.out.println("Finding moveDist");
-         // for(int x = 0; x < eWidth; x++)
-            // for(int y = 0; y < eHeight; y++)
-            // {
-               // moveDist[x][y] = initPath(new Pair(x, y));
-               // if(x==3&&y==0)
-                  // for(int b = 0; b < eHeight; b++)
-                  // {
-                     // for(int a = 0; a < eWidth; a++)
-                     // {
-                        // System.out.print(moveDist[x][y][a][b]+" ");
-                     // }
-                     // System.out.println();
-                  // }
-            // }
+         for(int x = 0; x < eWidth; x++)
+            for(int y = 0; y < eHeight; y++)
+            {
+               for(int a = 0; a < eWidth; a++)
+                  for(int b = 0; b < eHeight; b++)
+                     moveDist[x][y][a][b] = -1;
+               moveDist[x][y][x][y] = 0;
+            }
+         for(int x = eWidth-1; x >= 0; x--)
+         {
+            for(int y = eWidth-1; y >= 0; y--)
+            {
+               System.out.println(" ("+x+", "+y+") Time left: "+gc.getTimeLeftMs());
+               if(regions[x][y]==0)
+               {
+                  System.out.println("("+x+", "+y+") is not passable");
+                  continue;
+               }
+               int opC = 0;
+               LinkedList<Pair> q = new LinkedList<Pair>();
+               q.add(new Pair(x, y));
+               Pair cur;
+               Pair next;
+               cycle: while(!q.isEmpty())
+               {
+                  cur = q.remove();
+                  for(Direction d: adjacent)
+                  {
+                     next = addDirection(cur, d);
+                     if(inBounds(next))
+                        if(regions[next.x][next.y]!=0)
+                           if(moveDist[x][y][next.x][next.y]==-1)
+                           {
+                              moveDist[x][y][next.x][next.y] = moveDist[x][y][cur.x][cur.y]+1;
+                              q.add(next);
+                              opC++;
+                           }
+                  }
+               }   
+               System.out.println("("+x+", "+y+") took "+opC+" operations!");
+               //System.gc();
+               gc.nextTurn();
+            }
+         }
                
       //finds viable sites
          System.out.println("Finding viable sites");
@@ -283,8 +313,9 @@ import java.io.*;
       {
          try
          {
+            System.gc();
             System.out.println("Earth Round "+gc.round()+": ");
-            //System.out.println("Time left: "+gc.getTimeLeftMs());
+            System.out.println("Time left: "+gc.getTimeLeftMs());
             updateUnits();
                      
             for(int id: myUnits)
@@ -296,7 +327,6 @@ import java.io.*;
                   Pair roc = closestRocket(id);
                   if(roc!=null)
                   {
-                     moveDist[roc.x][roc.y] = initPath(roc);
                      if(moveDist[roc.x][roc.y][start.x][start.y]<5||gc.round()>650)
                         tasks.get(id).startLoading();
                   }
@@ -435,7 +465,7 @@ import java.io.*;
    public static int mine(int id)
    {
       Unit u = gc.unit(id);
-      Pair p = mapPair(u.location().mapLocation());
+      Pair p = unitPair(id);
       int xPos = p.x;
       int yPos = p.y;
       Direction best = null;
@@ -478,7 +508,7 @@ import java.io.*;
          for(Direction d: possible)
             if(gc.canMove(id, d))
             {
-               Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
+               Pair dest = addDirection(start, d);
                if(siteID[dest.x][dest.y]!=-1)
                   continue;
                gc.moveRobot(id, d);
@@ -486,7 +516,7 @@ import java.io.*;
             }
          for(Direction d: possible)
          {
-            Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
+            Pair dest = addDirection(start, d);
             if(siteID[dest.x][dest.y]!=-1)
                continue;
             try {
@@ -513,7 +543,7 @@ import java.io.*;
          for(Direction d: adjacent)
             if(gc.canMove(id, d))
             {
-               Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
+               Pair dest = addDirection(start, d);
                if(siteID[dest.x][dest.y]!=-1)
                   continue;
                try {
@@ -564,13 +594,12 @@ import java.io.*;
          Pair start = unitPair(id);
          Pair target = tasks.get(id).moveTarget;
          int targetDist = tasks.get(id).targetDist;
-         moveDist[target.x][target.y] = initPath(target);
          Direction best = null;
          int bestDist = 0;
          for(Direction d: adjacent)
             if(gc.canReplicate(id, d))
             {
-               Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
+               Pair next = addDirection(start, d);
                if(siteID[next.x][next.y]==-1)
                {
                   if(best==null||Math.abs(moveDist[target.x][target.y][next.x][next.y]-targetDist)<Math.abs(bestDist-targetDist))
@@ -626,7 +655,6 @@ import java.io.*;
       workers = new HashSet<Integer>();
       minerCount = 0;
       builderCount = 0;
-      activeRangers = 0;
       for(int x = 0; x < eWidth; x++)
          for(int y = 0; y < eHeight; y++)
          {
@@ -652,8 +680,6 @@ import java.io.*;
             mages.add(id);
          else if(ut.equals(UnitType.Ranger))
          {
-            if(!uLoc.isInGarrison()&&!uLoc.isInSpace())
-               activeRangers++;
             rangers.add(id);
             rangerDamage = gc.unit(id).damage();
          }
@@ -725,7 +751,6 @@ import java.io.*;
    }
    public static HashSet<Direction> nextMove(Pair start, Pair end, int goal)
    {
-      moveDist[end.x][end.y] = initPath(end);
       if(end==null||moveDist[end.x][end.y][start.x][start.y]==goal)
          return null;
       int curDist = moveDist[end.x][end.y][start.x][start.y];
@@ -745,60 +770,11 @@ import java.io.*;
       HashSet<Direction> possible = new HashSet<Direction>();
       for(Direction d: adjacent)
       {
-         Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
+         Pair next = addDirection(start, d);
          if(inBounds(next)&&moveDist[end.x][end.y][next.x][next.y]==curDist+direction)
             possible.add(d);
       }
       return possible;
-   }
-   public static int[][] initPath(Pair start)
-   {
-      if(moveDist[start.x][start.y]!=null)
-         return moveDist[start.x][start.y];
-      moveDist[start.x][start.y] = new int[eWidth][eHeight];
-      HashSet<Direction>[][] moves = new HashSet[eWidth][eHeight];
-      for(int x = 0; x < eWidth; x++)
-         for(int y = 0; y < eHeight; y++)
-         {
-            moves[x][y] = new HashSet<Direction>();
-            if(regions[x][y]!=0)
-               for(Direction d: adjacent)
-               {
-                  Pair next = mapPair(eMapLoc[x][y].add(d));
-                  if(inBounds(next)&&regions[next.x][next.y]!=0)
-                     moves[x][y].add(d);
-               }
-         }
-   
-      int[][] dist = new int[eWidth][eHeight];
-      boolean[][] used = new boolean[eWidth][eHeight];
-      for(int x = 0; x < eWidth; x++)
-         for(int y = 0; y < eHeight; y++)
-            dist[x][y] = -1;
-      if(regions[start.x][start.y]==0)
-         return dist;
-      dist[start.x][start.y] = 0;
-      used[start.x][start.y] = true;
-      LinkedList<Pair> q = new LinkedList<Pair>();
-      q.add(start);
-      cycle: while(!q.isEmpty())
-      {
-         Pair cur = q.remove();
-         for(Direction d: moves[cur.x][cur.y])
-         {
-            Pair next = mapPair(eMapLoc[cur.x][cur.y].add(d));
-            if(dist[next.x][next.y]==-1)
-            {
-               dist[next.x][next.y] = dist[cur.x][cur.y]+1;
-               q.add(next);
-               moves[next.x][next.y].remove(oppositeDirection(d));
-               //if(start.x==3&&start.y==0)
-                  //System.out.println("cur.x :"+cur.x+" cur.y: "+cur.y+" d: "+d);
-            }
-         }
-         moves[cur.x][cur.y].clear();
-      }   
-      return dist;
    }
          //floodfills map to assign region numbers
    public static void floodRegion(Pair p, int c)
@@ -812,7 +788,7 @@ import java.io.*;
          Pair id = q.remove();
          for(Direction d: directions)
             try{
-               Pair next = mapPair(eMapLoc[id.x][id.y].add(d));  
+               Pair next = addDirection(id, d); 
                if(inBounds(next)&&regions[next.x][next.y]==0&&eMap.isPassableTerrainAt(eMapLoc[next.x][next.y])!=0)
                {
                   regions[next.x][next.y] = c; 
@@ -824,7 +800,6 @@ import java.io.*;
    }
    public static Pair bestSite(Pair p)
    {
-      moveDist[p.x][p.y] = initPath(p);
       int minID = -1;
       int dist = 0;
       for(int id: rockets)
@@ -861,7 +836,7 @@ import java.io.*;
          Pair cur = q.remove();
          cycle: for(Direction d: adjacent)
          {
-            Pair site = mapPair(eMapLoc[cur.x][cur.y].add(d));
+            Pair site = addDirection(cur, d);
             if(inBounds(site)&&!used[site.x][site.y]&&regions[site.x][site.y]!=0)
             {
                used[site.x][site.y] = true;
@@ -869,7 +844,7 @@ import java.io.*;
                   if(viableSite[site.x][site.y])
                   {
                      for(int fact: factories)
-                        if(gc.unit(fact).location().mapLocation().distanceSquaredTo(eMapLoc[site.x][site.y])<=2)
+                        if(gc.unit(fact).location().mapLocation().distanceSquaredTo(eMapLoc[site.x][site.y])<=4)
                            continue cycle;
                      try {
                         if(gc.canSenseLocation(eMapLoc[site.x][site.y]))
@@ -904,7 +879,6 @@ import java.io.*;
    }
    public static Pair closestEnemy(Pair start, int minRange, int maxRange)
    {
-      moveDist[start.x][start.y] = initPath(start);
       Pair best = null;
       int bestScore = 100000;
       for(Pair en: attackList)
@@ -1040,7 +1014,7 @@ import java.io.*;
          karbAdjOrder.add(new KarbAdjacent(id, karbAdj[id.x][id.y]));
          for(Direction d: directions)
             try{
-               Pair next = mapPair(eMapLoc[id.x][id.y].add(d));   
+               Pair next = addDirection(id, d);   
                if(inBounds(next)&&!used[next.x][next.y]&&regions[next.x][next.y]!=0)
                {
                   used[next.x][next.y] = true;
@@ -1089,7 +1063,7 @@ import java.io.*;
                   return cur;
          for(Direction d: adjacent)
          {
-            Pair next = mapPair(eMapLoc[cur.x][cur.y].add(d));
+            Pair next = addDirection(cur, d);
             if(inBounds(next)&&!used[next.x][next.y])
             {
                q.add(next);
@@ -1122,7 +1096,6 @@ import java.io.*;
       if(ut.equals(UnitType.Ranger))
          minRange = (int) gc.unit(id).rangerCannotAttackRange();
       set = locWithin(unitPair(id), minRange, range);
-      moveDist[start.x][start.y] = initPath(start);
       for(Pair p: set)
          if(moveDist[p.x][p.y][start.x][start.y]!=-1&&moveDist[p.x][p.y][start.x][start.y]*cooldown<25)
             return false;
@@ -1157,6 +1130,30 @@ import java.io.*;
    public static boolean isStructure(int id)
    {
       return gc.unit(id).unitType().equals(UnitType.Factory)||gc.unit(id).unitType().equals(UnitType.Rocket);   
+   }
+   public static Pair addDirection(Pair p, Direction d)
+   {
+      int x = p.x;
+      int y = p.y;
+      if(d.equals(Direction.North))
+         return new Pair(x, y+1);
+      if(d.equals(Direction.Northeast))
+         return new Pair(x+1, y+1);
+      if(d.equals(Direction.East))
+         return new Pair(x+1, y);
+      if(d.equals(Direction.Southeast))
+         return new Pair(x+1, y-1);
+      if(d.equals(Direction.South))
+         return new Pair(x, y-1);
+      if(d.equals(Direction.Southwest))
+         return new Pair(x-1, y-1);
+      if(d.equals(Direction.West))
+         return new Pair(x-1, y);
+      if(d.equals(Direction.Northwest))
+         return new Pair(x-1, y+1);
+      if(d.equals(Direction.Center))
+         return new Pair(x, y);
+      return null;
    }
    public static Direction oppositeDirection(Direction d)
    {
@@ -1223,7 +1220,6 @@ import java.io.*;
    public static Pair closestRocket(int id)
    {
       Pair start = unitPair(id);
-      moveDist[start.x][start.y] = initPath(start);
       int bestPathSize = 0;
       Pair bestPair = null;
       for(int ro: rockets)
@@ -1427,11 +1423,11 @@ import java.io.*;
                produce(unitID, produceType);
                boolean working = true;
                int unloadCount = 0;
-               if(gc.unit(unitID).structureGarrison().size()>0&&activeRangers<30)
+               if(gc.unit(unitID).structureGarrison().size()>0)
                   cycle: while(working)
                   {
                      working = false;
-                     for(Direction d: cardinals)
+                     for(Direction d: adjacent)
                         if(gc.canUnload(unitID, d))
                         {
                            gc.unload(unitID, d);
@@ -1443,7 +1439,6 @@ import java.io.*;
                               tasks.get(produceID).taskType = 4;
                            working = true;
                            unloadCount++;
-                           activeRangers++;
                            System.out.println("Unloading unit: "+produceID);
                            continue cycle;
                         }
