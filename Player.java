@@ -1,3 +1,5 @@
+//ranger bug
+
 import bc.*;
 import java.util.*;
 import java.io.*;
@@ -41,6 +43,7 @@ public class Player {
    static HashSet<Integer> rangers;
    static HashSet<Integer> rockets;
    static HashSet<Integer> workers;
+   static int activeRangers = 0;
    static int builderCount = 0;
    static int minerCount = 0;
    static HashMap<Integer, Task> tasks = new HashMap<Integer, Task>();
@@ -622,6 +625,7 @@ public class Player {
       workers = new HashSet<Integer>();
       minerCount = 0;
       builderCount = 0;
+      activeRangers = 0;
       for(int x = 0; x < eWidth; x++)
          for(int y = 0; y < eHeight; y++)
          {
@@ -631,6 +635,7 @@ public class Player {
       for(int id: myUnits)
       {
          UnitType ut = gc.unit(id).unitType();
+         Location uLoc = gc.unit(id).location();
          if(ut.equals(UnitType.Factory))
          {
             factories.add(id);
@@ -646,6 +651,8 @@ public class Player {
             mages.add(id);
          else if(ut.equals(UnitType.Ranger))
          {
+            if(!uLoc.isInGarrison()&&!uLoc.isInSpace())
+               activeRangers++;
             rangers.add(id);
             rangerDamage = gc.unit(id).damage();
          }
@@ -712,6 +719,7 @@ public class Player {
                if(mMap.isPassableTerrainAt(mMapLoc[x][y])!=0)
                {
                   gc.launchRocket(id, mMapLoc[x][y]);
+                  launchLoc[x][y] = true;
                }
    }
    public static HashSet<Direction> nextMove(Pair start, Pair end, int goal)
@@ -1422,7 +1430,7 @@ public class Player {
                produce(unitID, produceType);
                boolean working = true;
                int unloadCount = 0;
-               if(gc.unit(unitID).structureGarrison().size()>0)
+               if(gc.unit(unitID).structureGarrison().size()>0&&activeRangers<30)
                   cycle: while(working)
                   {
                      working = false;
@@ -1438,6 +1446,7 @@ public class Player {
                               tasks.get(produceID).taskType = 4;
                            working = true;
                            unloadCount++;
+                           activeRangers++;
                            System.out.println("Unloading unit: "+produceID);
                            continue cycle;
                         }
