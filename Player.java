@@ -3,7 +3,7 @@
 import bc.*;
 import java.util.*;
 import java.io.*;
- @SuppressWarnings("unchecked")
+@SuppressWarnings("unchecked")
  public class Player {
 
    //Basic Info 
@@ -267,7 +267,7 @@ import java.io.*;
       } 
       catch(Exception e) {e.printStackTrace();}
    }
-    public static void main(String[] args) {
+   public static void main(String[] args) {
       if(gc.planet().equals(Planet.Earth))
          earth();
       else
@@ -277,7 +277,7 @@ import java.io.*;
          gc.nextTurn();
       }
    }
-    public static void earth() {
+   public static void earth() {
       //rounds 1-1000
       while(gc.round()<=maxRound)
       {
@@ -350,7 +350,7 @@ import java.io.*;
       }
          //End of match
    }
-    public static void mars() {
+   public static void mars() {
       // Do Something
       while(gc.round()<=maxRound)
       {
@@ -362,7 +362,7 @@ import java.io.*;
    
    // UNIT METHODS
    //-2 means not enough resources, -1 means factory is busy, 0 means success
-    public static int produce(int id, UnitType ut) //factory ID, type of unit to be made
+   public static int produce(int id, UnitType ut) //factory ID, type of unit to be made
    {
       if(gc.canProduceRobot(id, ut))
       {
@@ -375,7 +375,7 @@ import java.io.*;
          return -2;
    }
    //worker id, structure id, -2 means on top of site, -1 means too far away, 0 means build success, 1 means structure is finished
-    public static int build(int id, Pair target, UnitType ut) 
+   public static int build(int id, Pair target) 
    {
       Pair start = unitPair(id);
       //System.out.println("Unit at "+p+" is trying to build at "+target+" which has "+siteID[target.x][target.y]);
@@ -387,7 +387,7 @@ import java.io.*;
          return -11;
       }
       if(siteID[target.x][target.y]==-2)
-         return blueprint(id, target, ut);
+         return blueprint(id, target);
       int sID = siteID[target.x][target.y];
       if(gc.unit(sID).structureIsBuilt()!=0)
          return 1;
@@ -403,10 +403,9 @@ import java.io.*;
       return 0;
    }
    //returns the id of the blueprinted structure, -5 if too far away, -4 if not enough resources, -3 if being blocked
-    public static int blueprint(int id, Pair target, UnitType ut)
+   public static int blueprint(int id, Pair target)
    {
-      if(rocketResearched&&random.nextDouble()<(gc.round()/750)&&factories.size()>rockets.size())
-         ut = UnitType.Rocket;
+      UnitType ut = UnitType.Factory;
       if(factories.size()>=5)
          ut = UnitType.Rocket;
       Pair p = unitPair(id);
@@ -421,6 +420,10 @@ import java.io.*;
          tasks.put(blueID, new Task(blueID));
          tasks.get(blueID).taskType = 2;
          siteID[target.x][target.y] = blueID;
+         if(ut.equals(UnitType.Factory))
+            factories.add(blueID);
+         else
+            rockets.add(blueID);
          return 0;
       }
       if(gc.karbonite()<100)
@@ -429,7 +432,7 @@ import java.io.*;
          return -3;
    }
    //-2 means too much heat, -1 means no karbonite in adjacent squares, 0 means successfully mined
-    public static int mine(int id)
+   public static int mine(int id)
    {
       Unit u = gc.unit(id);
       Pair p = mapPair(u.location().mapLocation());
@@ -456,7 +459,7 @@ import java.io.*;
       gc.harvest(u.id(), best);
       return 0;
    }
-    public static int move(int id, boolean push, HashSet<Integer> prevPush)
+   public static int move(int id, boolean push, HashSet<Integer> prevPush)
    {
       if(prevPush==null)
          prevPush = new HashSet<Integer>();
@@ -534,7 +537,7 @@ import java.io.*;
             }
       return -1;
    }
-    public static void replicate(int id)
+   public static void replicate(int id)
    {
       //System.out.println(minerCount);
       //System.out.println(builderCount);
@@ -547,8 +550,16 @@ import java.io.*;
          // return;
       boolean noMiners = minerCount==0;
       boolean noBuilders = builderCount==0;
-      boolean toRep = (tasks.get(id).taskType==0&&minerCount<5)||(tasks.get(id).taskType==1&&builderCount<5);
-      if(noBuilders||noMiners||toRep)
+      int type = -1;
+      if(tasks.get(id).taskType==0&&minerCount<5)
+         type = 0;
+      else if(tasks.get(id).taskType==1&&builderCount<5)
+         type = 1;
+      else if(noMiners)
+         type = 0;
+      else if(noBuilders)
+         type = 1;
+      if(type!=-1)
       {
          Pair start = unitPair(id);
          Pair target = tasks.get(id).moveTarget;
@@ -576,17 +587,7 @@ import java.io.*;
             int newID = gc.senseUnitAtLocation(repLoc).id();
             //System.out.println("oldid "+id+" vs newid "+newID);
             tasks.put(newID, new Task(newID));
-            if(noMiners)
-            {
-               tasks.get(newID).taskType = 0;
-               minerCount++;
-            }
-            else if(noBuilders)
-            {
-               tasks.get(newID).taskType = 1;
-               builderCount++;
-            }
-            else if(tasks.get(id).taskType==0)
+            if(type==0)
             {
                tasks.get(newID).taskType = 0;
                minerCount++;
@@ -602,7 +603,7 @@ import java.io.*;
             System.out.println("replication fail at "+start);
       }
    }
-    public static void updateUnits() throws Exception
+   public static void updateUnits() throws Exception
    {
       for(int x = 0; x < eWidth; x++)
          for(int y = 0; y < eHeight; y++)
@@ -711,7 +712,7 @@ import java.io.*;
    //END OF UNIT METHODS
    
    //MAP METHODS
-    public static void launch(int id)
+   public static void launch(int id)
    {
       for(int x = 0; x < mWidth; x++)
          for(int y = 0; y < mHeight; y++)
@@ -722,7 +723,7 @@ import java.io.*;
                   launchLoc[x][y] = true;
                }
    }
-    public static HashSet<Direction> nextMove(Pair start, Pair end, int goal)
+   public static HashSet<Direction> nextMove(Pair start, Pair end, int goal)
    {
       moveDist[end.x][end.y] = initPath(end);
       if(end==null||moveDist[end.x][end.y][start.x][start.y]==goal)
@@ -750,7 +751,7 @@ import java.io.*;
       }
       return possible;
    }
-    public static int[][] initPath(Pair start)
+   public static int[][] initPath(Pair start)
    {
       if(moveDist[start.x][start.y]!=null)
          return moveDist[start.x][start.y];
@@ -800,7 +801,7 @@ import java.io.*;
       return dist;
    }
          //floodfills map to assign region numbers
-    public static void floodRegion(Pair p, int c)
+   public static void floodRegion(Pair p, int c)
    {
       int karbCount = 0;
       LinkedList<Pair> q = new LinkedList<Pair>();
@@ -821,7 +822,7 @@ import java.io.*;
             catch(Exception e) {e.printStackTrace();}
       }
    }
-    public static Pair bestSite(Pair p)
+   public static Pair bestSite(Pair p)
    {
       moveDist[p.x][p.y] = initPath(p);
       int minID = -1;
@@ -890,7 +891,7 @@ import java.io.*;
       }
       return null;
    }
-    public static HashSet<Pair> locWithin(Pair target, int minRange, int maxRange)
+   public static HashSet<Pair> locWithin(Pair target, int minRange, int maxRange)
    {
       VecMapLocation minVec = gc.allLocationsWithin(eMapLoc[target.x][target.y], minRange);
       VecMapLocation maxVec = gc.allLocationsWithin(eMapLoc[target.x][target.y], maxRange);
@@ -901,7 +902,7 @@ import java.io.*;
          ret.remove(mapPair(minVec.get(y)));
       return ret;
    }
-    public static Pair closestEnemy(Pair start, int minRange, int maxRange)
+   public static Pair closestEnemy(Pair start, int minRange, int maxRange)
    {
       moveDist[start.x][start.y] = initPath(start);
       Pair best = null;
@@ -923,7 +924,7 @@ import java.io.*;
       }
       return best;
    }
-    public static void rangerTask()
+   public static void rangerTask()
    {
       HashSet<Integer> killed = new HashSet<Integer>();
       if(enemyUnits!=null)
@@ -1024,7 +1025,7 @@ import java.io.*;
    
    //KARBONITE-RELATED METHODS
    //floodfills region and returns a PriorityQueue containing locations with highest karbAdj value
-    public static PriorityQueue<KarbAdjacent> countMaxKarbAdj(Pair p)
+   public static PriorityQueue<KarbAdjacent> countMaxKarbAdj(Pair p)
    {
       boolean[][] used = new boolean[eWidth][eHeight];
       PriorityQueue<KarbAdjacent> karbAdjOrder = new PriorityQueue<KarbAdjacent>();
@@ -1050,7 +1051,7 @@ import java.io.*;
       }
       return karbAdjOrder;
    }
-    public static int countKarbAdj(Pair p, boolean useCur)
+   public static int countKarbAdj(Pair p, boolean useCur)
    {
       int xPos = p.x;
       int yPos = p.y;
@@ -1072,7 +1073,7 @@ import java.io.*;
       }
    }
    //return best mine given known current conditions
-    public static Pair bestMine(int id)
+   public static Pair bestMine(int id)
    {
       Pair start = unitPair(id);
       LinkedList<Pair> q = new LinkedList<Pair>();
@@ -1103,7 +1104,7 @@ import java.io.*;
    
    //HELPER METHODS
    //determines whether or not an enemy poses a threat to a building at this site
-    public static boolean vulnerable(int id, Pair start)
+   public static boolean vulnerable(int id, Pair start)
    {
       UnitType ut = gc.unit(id).unitType();
       if(ut.equals(UnitType.Healer))
@@ -1127,11 +1128,11 @@ import java.io.*;
             return false;
       return true;
    }
-    public static boolean inGarrison(int id)
+   public static boolean inGarrison(int id)
    {
       return gc.unit(id).location().isInGarrison();
    }
-    public static boolean isCardinal(Pair p1, Pair p2)
+   public static boolean isCardinal(Pair p1, Pair p2)
    {
       MapLocation m1 = eMapLoc[p1.x][p1.y];
       MapLocation m2 = eMapLoc[p2.x][p2.y];
@@ -1140,7 +1141,7 @@ import java.io.*;
             return true;
       return false;
    }
-    public static boolean isDiagonal(Pair p1, Pair p2)
+   public static boolean isDiagonal(Pair p1, Pair p2)
    {
       MapLocation m1 = eMapLoc[p1.x][p1.y];
       MapLocation m2 = eMapLoc[p2.x][p2.y];
@@ -1149,15 +1150,15 @@ import java.io.*;
             return true;
       return false;
    }
-    public static int distance(Pair p1, Pair p2)
+   public static int distance(Pair p1, Pair p2)
    {
       return (p1.x-p2.x)*(p1.x-p2.x)+(p1.y-p2.y)*(p1.y-p2.y);
    }
-    public static boolean isStructure(int id)
+   public static boolean isStructure(int id)
    {
       return gc.unit(id).unitType().equals(UnitType.Factory)||gc.unit(id).unitType().equals(UnitType.Rocket);   
    }
-    public static Direction oppositeDirection(Direction d)
+   public static Direction oppositeDirection(Direction d)
    {
       if(d.equals(Direction.North))
          return Direction.South;
@@ -1177,49 +1178,49 @@ import java.io.*;
          return Direction.Southeast;
       return null;
    }
-    public static Direction findDirection(Pair start, Pair end)
+   public static Direction findDirection(Pair start, Pair end)
    {
       return eMapLoc[start.x][start.y].directionTo(eMapLoc[end.x][end.y]);
    }
-    public static HashSet<Integer> toIDList(VecUnit vu)
+   public static HashSet<Integer> toIDList(VecUnit vu)
    {
       HashSet<Integer> ret = new HashSet<Integer>();
       for(int x = 0; x < vu.size(); x++)
          ret.add(vu.get(x).id());
       return ret;
    }
-    public static boolean isEmpty(Pair id)
+   public static boolean isEmpty(Pair id)
    {
       return gc.hasUnitAtLocation(eMapLoc[id.x][id.y])&&regions[id.x][id.y]!=0;
    }
-    public static boolean inBounds(Pair id)
+   public static boolean inBounds(Pair id)
    {
       return id.x>=0&&id.x<eWidth&&id.y>=0&&id.y<eHeight;
    }
-    public static boolean inBounds(int x, int y)
+   public static boolean inBounds(int x, int y)
    {
       return x>=0&&x<eWidth&&y>=0&&y<eHeight;
    }
-    public static boolean avoid(Pair id, ArrayList<Pair> avoid)
+   public static boolean avoid(Pair id, ArrayList<Pair> avoid)
    {
       for(Pair a: avoid)
          if(a.equals(id))
             return false;
       return true;
    }
-    public static Pair mapPair(MapLocation m)
+   public static Pair mapPair(MapLocation m)
    {
       return new Pair(m.getX(),m.getY());
    }
-    public static Pair unitPair(int id)
+   public static Pair unitPair(int id)
    {
       return mapPair(gc.unit(id).location().mapLocation());
    }
-    public static UnitType unitType(int id)
+   public static UnitType unitType(int id)
    {
       return gc.unit(id).unitType();
    }
-    public static Pair closestRocket(int id)
+   public static Pair closestRocket(int id)
    {
       Pair start = unitPair(id);
       moveDist[start.x][start.y] = initPath(start);
@@ -1244,31 +1245,31 @@ import java.io.*;
    //END OF HELPER METHODS
    
    //ADDITIONAL CLASSES
-    static class Path
+   static class Path
    {
       Pair start;
       Pair end;
       LinkedList<Direction> seq = new LinkedList<Direction>();
-       public Path(Pair s, Pair e)
+      public Path(Pair s, Pair e)
       {
          start = s;
          end = e;
       }
-       public Path copy()
+      public Path copy()
       {
          Path p = new Path(start, end);
          for(Direction d: seq)
             p.seq.add(d);
          return p;
       }
-       public Path reverse()
+      public Path reverse()
       {
          Path p = new Path(end, start);
          for(Direction d: seq)
             p.seq.addLast(oppositeDirection(d));
          return p;
       }
-       public String toString()
+      public String toString()
       {
          if(seq.size()==0)
             return "[]";
@@ -1279,24 +1280,24 @@ import java.io.*;
          return s;
       }
    }
-    static class KarbAdjacent implements Comparable<KarbAdjacent> {
+   static class KarbAdjacent implements Comparable<KarbAdjacent> {
       Pair loc;
       int size;
    
-       public KarbAdjacent(Pair p, int d) {
+      public KarbAdjacent(Pair p, int d) {
          loc = p;
          size = d;
       }
    //greatest goes first
-       public int compareTo(KarbAdjacent x) {
+      public int compareTo(KarbAdjacent x) {
          return x.size-size;
       }
-       public String toString()
+      public String toString()
       {
          return "["+loc.toString()+" "+size+"]";
       }
    }
-    static class Task
+   static class Task
    {
       int taskType;
       int[] typeOn = new int[10]; //lower value is higher priority, 0 means no priority
@@ -1306,13 +1307,12 @@ import java.io.*;
       int targetDist = 0;
       Pair moveTarget = null; //for moving: final destination
       UnitType produceType = null; //for producing: type of robot
-      UnitType buildType = null;
       boolean halting = false;
-       public Task(int id)
+      public Task(int id)
       {
          unitID = id;
       }
-       public String toString()
+      public String toString()
       {
          String str = "Unit ID: ";
          str+=unitID;
@@ -1320,7 +1320,7 @@ import java.io.*;
          str+=moveTarget;
          return str;
       }
-       public boolean startMoving(Pair target, int goal)
+      public boolean startMoving(Pair target, int goal)
       {
          if(target==null)
             return false;
@@ -1328,7 +1328,7 @@ import java.io.*;
          targetDist = goal;
          return true;
       }
-       public boolean startMining(Pair target)
+      public boolean startMining(Pair target)
       {
          if(target==null)
          {
@@ -1340,24 +1340,21 @@ import java.io.*;
          usedMine[target.x][target.y] = unitID;
          return true;
       }
-       public boolean startBuilding(Pair site, UnitType ut)
+      public boolean startBuilding(Pair site)
       {
-         if(gc.round()>325&&Math.random()<0.2)
-            ut = UnitType.Rocket;
          Pair cur = unitPair(unitID);
          //System.out.println("The unit at "+unitPair(unitID)+" is going to build at "+site);
          typeOn[1] = maxStep++;
-         buildType = ut;
          startMoving(site, 1);
          return true;
       }
-       public boolean startProducing(UnitType type)
+      public boolean startProducing(UnitType type)
       {
          typeOn[2] = maxStep++;
          produceType = type;
          return true;
       }
-       public boolean startLoading()
+      public boolean startLoading()
       {
          Pair closest = closestRocket(unitID);
          if(closest==null)
@@ -1367,7 +1364,7 @@ import java.io.*;
          return true;
       }
       //return task number
-       public int getTask()
+      public int getTask()
       {
          int index = -1;
          for(int x = 0; x < typeOn.length; x++)
@@ -1387,7 +1384,7 @@ import java.io.*;
       5: heal
       6: load
       */
-       public int doTask()
+      public int doTask()
       {
          Pair start = unitPair(unitID);
          if(getTask()==-1)
@@ -1395,7 +1392,7 @@ import java.io.*;
             if(taskType==0)
                startMining(bestMine(unitID));
             if(taskType==1)
-               startBuilding(bestSite(unitPair(unitID)), UnitType.Factory);
+               startBuilding(bestSite(unitPair(unitID)));
          }
          if(moveTarget!=null)
             move(unitID, false, null);
@@ -1406,7 +1403,7 @@ import java.io.*;
             case 0:
                if(!startMining(bestMine(unitID)))
                {
-                  startBuilding(bestSite(start), UnitType.Factory);
+                  startBuilding(bestSite(start));
                   taskType = 1;
                }
                else 
@@ -1417,10 +1414,10 @@ import java.io.*;
                   break;
                }
             case 1:
-               startBuilding(bestSite(unitPair(unitID)), UnitType.Factory);
+               startBuilding(bestSite(unitPair(unitID)));
                if(siteID[moveTarget.x][moveTarget.y]==-1)
                   siteID[moveTarget.x][moveTarget.y] = -2;
-               status = build(unitID, moveTarget, buildType);
+               status = build(unitID, moveTarget);
                for(int factID: factories)
                   if(gc.canRepair(unitID, factID))
                      gc.repair(unitID, factID);
@@ -1457,7 +1454,9 @@ import java.io.*;
                   ret = -1;
                break;
             case 6:
-            
+               for(int roc: rockets)
+                  if(gc.canLoad(unitID, roc))
+                     gc.load(unitID, roc);
             default:
                {
                   if(unitType(unitID).equals(UnitType.Worker))
@@ -1467,18 +1466,18 @@ import java.io.*;
          return ret;
       }
    }
-    static class Site implements Comparable<Site>
+   static class Site implements Comparable<Site>
    {
       Pair loc;
       HashSet<Integer> builders;
       int dist;
-       public Site(Pair p, HashSet<Integer> b, int d)
+      public Site(Pair p, HashSet<Integer> b, int d)
       {
          loc = p;
          builders = b;
          dist = d;
       }
-       public int compareTo(Site s)
+      public int compareTo(Site s)
       {
          if(s==null)
             return -1;
@@ -1487,14 +1486,14 @@ import java.io.*;
          return dist-s.dist;
       }
    }
-    static class Enemy implements Comparable<Enemy>
+   static class Enemy implements Comparable<Enemy>
    {
       Unit unit;
       int attackers;
       int movers;
       int score;
       boolean kill;
-       public Enemy(Unit u)
+      public Enemy(Unit u)
       {
          unit = u; 
          UnitType ut = unit.unitType();
@@ -1522,7 +1521,7 @@ import java.io.*;
          }  
          score-=u.health();
       }
-       public Enemy(Unit u, int a, int m, boolean k)
+      public Enemy(Unit u, int a, int m, boolean k)
       {
          unit = u;
          attackers = a;
@@ -1565,48 +1564,48 @@ import java.io.*;
          if(kill)
             score*=2;  
       }
-       public int compareTo(Enemy e)
+      public int compareTo(Enemy e)
       {
          return e.score-score;
       }
    }
 }
- class Pair
+class Pair
 {
    int x;
    int y;
-    public Pair(int a, int b)
+   public Pair(int a, int b)
    {
       x = a;
       y = b;
    }
-    public boolean equals(Object o)
+   public boolean equals(Object o)
    {
       if(o==null)
          return false;
       Pair p = (Pair) o;
       return x==p.x&&y==p.y;
    }
-    public String toString()
+   public String toString()
    {
       return x+" "+y;
    }
-    public int hashCode()
+   public int hashCode()
    {
       return x*100+y;
    }
-    static class CompareX implements Comparator<Pair>
+   static class CompareX implements Comparator<Pair>
    {
-       public int compare(Pair p1, Pair p2)
+      public int compare(Pair p1, Pair p2)
       {
          if(p1.x!=p2.x)
             return p1.x-p2.x;
          return p1.y-p2.y;
       }
    }
-    static class CompareY implements Comparator<Pair>
+   static class CompareY implements Comparator<Pair>
    {
-       public int compare(Pair p1, Pair p2)
+      public int compare(Pair p1, Pair p2)
       {
          if(p1.y!=p2.y)
             return p1.y-p2.y;
