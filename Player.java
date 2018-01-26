@@ -7,7 +7,7 @@ import java.io.*;
  public class Player {
 
    //Basic Info 
-   static PrintWriter out;
+   static long totalTime = 0;
    static int maxRound = 1000;   // the number of rounds
    static Planet earth = Planet.Earth;
    static Planet mars = Planet.Mars;
@@ -18,6 +18,7 @@ import java.io.*;
    static Direction[] cardinals = {Direction.North, Direction.East, Direction.South, Direction.West};
    static Direction[] diagonals = {Direction.Northeast, Direction.Southeast, Direction.Northwest, Direction.Southwest};
    static Direction[] adjacent = {Direction.North, Direction.East, Direction.South, Direction.West, Direction.Northeast, Direction.Southeast, Direction.Northwest, Direction.Southwest};
+   static HashMap<Direction, Pair> dirMove = new HashMap<Direction, Pair>();
    static GameController gc = new GameController();;
    static PlanetMap eMap = gc.startingMap(earth);
    static PlanetMap mMap = gc.startingMap(mars);
@@ -32,9 +33,11 @@ import java.io.*;
    static boolean[][] launchLoc = new boolean[mWidth][mHeight];
    static int[][][][] moveDist = new int[eWidth][eHeight][eWidth][eHeight];
    static int[][] adjCount = new int[eWidth][eHeight];
+   static Pair[][] pairs = new Pair[eWidth][eHeight];
    
    //Unit Info
    static HashSet<Integer> myInit = new HashSet<Integer>();
+   static HashSet<Pair> newSite;
    static HashSet<Integer> myUnits;
    static HashSet<Integer> healers;
    static HashSet<Integer> factories;
@@ -64,10 +67,22 @@ import java.io.*;
       
    static {
       try {
+         long startTime = System.nanoTime();
          System.out.println("first random is "+random.nextDouble());
       
-      //log file
-         out = new PrintWriter(new File(myTeam+"_"+gc.planet()+"log.txt"));
+         dirMove.put(Direction.North, new Pair(0, 1));
+         dirMove.put(Direction.Northeast, new Pair(1, 1));
+         dirMove.put(Direction.East, new Pair(1, 0));
+         dirMove.put(Direction.Southeast, new Pair(1, -1));
+         dirMove.put(Direction.South, new Pair(0, -1));
+         dirMove.put(Direction.Southwest, new Pair(-1, -1));
+         dirMove.put(Direction.West, new Pair(-1, 0));
+         dirMove.put(Direction.Northwest, new Pair(-1, 1));
+         dirMove.put(Direction.Center, new Pair(0, 0));
+      
+         for(int x = 0; x < eWidth; x++)
+            for(int y = 0; y < eHeight; y++)
+               pairs[x][y] = new Pair(x, y);
       
       //Research
          System.out.println("Queueing research");
@@ -120,7 +135,7 @@ import java.io.*;
                continue cycle;
             }
             LinkedList<Pair> q = new LinkedList<Pair>();
-            q.add(new Pair(i/3, i%3));
+            q.add(pairs[i/3][i%3]);
             array[i] = false;
             while(!q.isEmpty())
             {
@@ -128,12 +143,13 @@ import java.io.*;
                for(Direction d: directions)
                {
                   Pair next = addDirection(p, d);
-                  if(next.x>=0&&next.x<3&&next.y>=0&&next.y<3)
-                     if(array[next.x*3+next.y])
-                     {
-                        array[next.x*3+next.y] = false;
-                        q.add(next);
-                     }
+                  if(next!=null)
+                     if(next.x>=0&&next.x<3&&next.y>=0&&next.y<3)
+                        if(array[next.x*3+next.y])
+                        {
+                           array[next.x*3+next.y] = false;
+                           q.add(next);
+                        }
                }
             }
             for(int n = 0; n < 9; n++)
@@ -172,7 +188,7 @@ import java.io.*;
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
                try {
-                  karbAdj[x][y] = countKarbAdj(new Pair(x, y), false);
+                  karbAdj[x][y] = countKarbAdj(pairs[x][y], false);
                } 
                catch(Exception e) {e.printStackTrace();}
          System.out.println("Finished finding karbonite sums");
@@ -196,7 +212,7 @@ import java.io.*;
                   if(regions[x][y]!=0||eMap.isPassableTerrainAt(eMapLoc[x][y])==0)
                      continue cycle;
                   regionCount++;
-                  floodRegion(new Pair(x, y), regionCount);
+                  floodRegion(pairs[x][y], regionCount);
                   for(int id: myUnits)
                      if(regions[unitPair(id).x][unitPair(id).y]==regions[x][y])
                         continue cycle;
@@ -216,7 +232,7 @@ import java.io.*;
             for(int y = 0; y < eHeight; y++)
                for(Direction d: adjacent)
                {
-                  Pair p = addDirection(new Pair(x, y), d);
+                  Pair p = addDirection(pairs[x][y], d);
                   if(inBounds(p)&&regions[p.x][p.y]!=0)
                      adjCount[p.x][p.y]++;
                }
@@ -231,40 +247,37 @@ import java.io.*;
                      moveDist[x][y][a][b] = -1;
                moveDist[x][y][x][y] = 0;
             }
-         for(int x = eWidth-1; x >= 0; x--)
+         ArrayDeque<Pair> q = new ArrayDeque<Pair>();
+         for(int x = 0; x < eWidth; x++)
          {
-            for(int y = eWidth-1; y >= 0; y--)
+            for(int y = 0; y < eHeight; y++)
             {
-               System.out.println(" ("+x+", "+y+") Time left: "+gc.getTimeLeftMs());
+               long time = System.nanoTime();
                if(regions[x][y]==0)
                {
-                  System.out.println("("+x+", "+y+") is not passable");
+                  //System.out.println("("+x+", "+y+") is not passable");
                   continue;
                }
-               int opC = 0;
-               LinkedList<Pair> q = new LinkedList<Pair>();
-               q.add(new Pair(x, y));
-               Pair cur;
-               Pair next;
+               q.addFirst(pairs[x][y]);
                cycle: while(!q.isEmpty())
                {
-                  cur = q.remove();
-                  for(Direction d: adjacent)
-                  {
-                     next = addDirection(cur, d);
-                     if(inBounds(next))
-                        if(regions[next.x][next.y]!=0)
-                           if(moveDist[x][y][next.x][next.y]==-1)
-                           {
-                              moveDist[x][y][next.x][next.y] = moveDist[x][y][cur.x][cur.y]+1;
-                              q.add(next);
-                              opC++;
-                           }
-                  }
+                  Pair cur = q.removeLast();
+                  for (int dx = -1; dx <= 1; dx++)
+                     for (int dy = -1; dy <= 1; dy++)
+                     {
+                        int newX = cur.x+dx;
+                        int newY = cur.y+dy;
+                        if(inBounds(newX, newY))
+                           if(regions[newX][newY]!=0)
+                              if(moveDist[x][y][newX][newY]==-1)
+                              {
+                                 moveDist[x][y][newX][newY] = moveDist[x][y][cur.x][cur.y]+1;
+                                 q.addFirst(pairs[newX][newY]);
+                              }
+                     }
                }   
-               System.out.println("("+x+", "+y+") took "+opC+" operations!");
                //System.gc();
-               gc.nextTurn();
+               //System.out.println(" ("+x+", "+y+") Time taken: "+(System.nanoTime()-time)/1000000.0+" ms");
             }
          }
                
@@ -293,6 +306,8 @@ import java.io.*;
                tasks.get(id).taskType = 0; 
                minerCount++;
             }
+         totalTime+=System.nanoTime()-startTime;
+         System.out.println("Took "+totalTime/1000000.0+" ms to initialize");
       //end of initialization
       } 
       catch(Exception e) {e.printStackTrace();}
@@ -311,11 +326,10 @@ import java.io.*;
       //rounds 1-1000
       while(gc.round()<=maxRound)
       {
+         long startTime = System.nanoTime();
          try
          {
-            System.gc();
             System.out.println("Earth Round "+gc.round()+": ");
-            System.out.println("Time left: "+gc.getTimeLeftMs());
             updateUnits();
                      
             for(int id: myUnits)
@@ -376,6 +390,10 @@ import java.io.*;
                }
          } 
          catch(Exception e) {e.printStackTrace();} 
+            //System.gc();
+         totalTime+=System.nanoTime()-startTime;
+         System.out.println("Earth Round "+gc.round()+" took "+(System.nanoTime()-startTime)/1000000.0+" ms");
+         System.out.println("Earth Round "+gc.round()+" ended at "+(totalTime)/1000000.0+" ms");
          gc.nextTurn();
       }
          //End of match
@@ -473,9 +491,9 @@ import java.io.*;
       for(Direction d: directions)
          try
          {
-            MapLocation loc = eMapLoc[p.x][p.y].add(d);
-            if(inBounds(mapPair(loc)))
-               if(gc.karboniteAt(loc)>max)
+            Pair loc = addDirection(p, d);
+            if(inBounds(loc))
+               if(gc.karboniteAt(eMapLoc[loc.x][loc.y])>max)
                {
                   best = d;
                   max = (int)gc.karboniteAt(eMapLoc[p.x][p.y].add(d));
@@ -653,6 +671,7 @@ import java.io.*;
       rangers = new HashSet<Integer>();
       rockets = new HashSet<Integer>();
       workers = new HashSet<Integer>();
+      newSite = new HashSet<Pair>();
       minerCount = 0;
       builderCount = 0;
       for(int x = 0; x < eWidth; x++)
@@ -705,7 +724,10 @@ import java.io.*;
                      builderCount++;
                      if(tasks.get(id).moveTarget!=null)
                         if(siteID[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]==-1)
+                        {
                            siteID[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]=-2;
+                           newSite.add(pairs[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]);
+                        }
                   }
                }
             } 
@@ -731,9 +753,9 @@ import java.io.*;
          if(gc.unit(id).unitType().equals(UnitType.Knight))
             knightDefense = (int)gc.unit(id).knightDefense();
       }
-      if(attackList.size()==0)
-         for(int id: enemyInit.keySet())
-            attackList.add(enemyInit.get(id));
+      // if(attackList.size()==0)
+         // for(int id: enemyInit.keySet())
+            // attackList.add(enemyInit.get(id));
    }
    //END OF UNIT METHODS
    
@@ -807,7 +829,7 @@ import java.io.*;
          if(gc.unit(id).structureIsBuilt()!=0)
             continue;
          Pair loc = unitPair(id);
-         if(moveDist[p.x][p.y][loc.x][loc.y]<5)
+         if(moveDist[p.x][p.y][loc.x][loc.y]<7)
             if(minID==-1||moveDist[p.x][p.y][loc.x][loc.y]<dist)
             {
                minID = id;
@@ -819,7 +841,7 @@ import java.io.*;
          if(gc.unit(id).structureIsBuilt()!=0)
             continue;
          Pair loc = unitPair(id);
-         if(moveDist[p.x][p.y][loc.x][loc.y]<5)
+         if(moveDist[p.x][p.y][loc.x][loc.y]<7)
             if(minID==-1||moveDist[p.x][p.y][loc.x][loc.y]<dist)
             {
                minID = id;
@@ -828,6 +850,19 @@ import java.io.*;
       }
       if(minID!=-1)
          return unitPair(minID);
+      Pair bestSite = null;
+      dist = 0;
+      for(Pair site: newSite)
+      {
+         if(moveDist[p.x][p.y][site.x][site.y]<7)
+            if(bestSite==null||moveDist[p.x][p.y][site.x][site.y]<dist)
+            {
+               bestSite = site;
+               dist = moveDist[p.x][p.y][site.x][site.y];
+            }
+      }
+      if(bestSite!=null)
+         return bestSite;
       LinkedList<Pair> q = new LinkedList<Pair>();
       boolean[][] used = new boolean[eWidth][eHeight];
       q.add(p);
@@ -877,109 +912,58 @@ import java.io.*;
          ret.remove(mapPair(minVec.get(y)));
       return ret;
    }
-   public static Pair closestEnemy(Pair start, int minRange, int maxRange)
+   public static Pair closestEnemy(Pair start, HashSet<Pair> all)
    {
       Pair best = null;
       int bestScore = 100000;
-      for(Pair en: attackList)
+      for(Pair end: all)
       {
-         HashSet<Pair> possible = locWithin(en, minRange, maxRange);
-         int min = Integer.MAX_VALUE;
-         for(Pair end: possible)
-            if(moveDist[start.x][start.y][end.x][end.y]!=-1)
-            {
-               min = Math.min(min, moveDist[start.x][start.y][end.x][end.y]);
-            }
-         if(min<bestScore)
+         int score = moveDist[start.x][start.y][end.x][end.y];
+         if(score==-1)
+            continue;
+         if(score<bestScore)
          {
-            best = en;
-            bestScore = min;
+            best = end;
+            bestScore = score;
          }
       }
       return best;
    }
    public static void rangerTask()
    {
-      HashSet<Integer> killed = new HashSet<Integer>();
-      if(enemyUnits!=null)
+      if(rangers.size()==0)
+         return;
+      int minRange = 0;
+      int maxRange = 0;
+      for(int id: rangers)
       {
-         for(int en: enemyUnits)
-         {
-            HashSet<Integer> canAttack = new HashSet<Integer>();
-            for(int id: rangers)
-            {
-               if(gc.unit(id).location().isInGarrison())
-                  continue;
-               if(gc.isAttackReady(id))
-                  canAttack.add(id);
-            }
-            Pair enLoc = unitPair(en);
-            int count = 0;
-            int health = (int) gc.unit(en).health();
-            int def = 0;
-            if(gc.unit(en).unitType().equals(UnitType.Knight))
-               def = knightDefense;
-            HashSet<Integer> attackers = new HashSet<Integer>();
-            HashMap<Integer, Direction> movers = new HashMap<Integer, Direction>();
-            for(int id: canAttack)
-            {
-               Pair loc = unitPair(id);
-               if(gc.canAttack(id, en))
-                  attackers.add(id);
-               else
-               {
-                  for(Direction d: adjacent)
-                     if(gc.canMove(id, d)&&gc.isMoveReady(id))
-                     {
-                        int diff = (int)eMapLoc[loc.x][loc.y].add(d).distanceSquaredTo(eMapLoc[enLoc.x][enLoc.y]);
-                        if(diff<=gc.unit(id).attackRange()&&diff>gc.unit(id).rangerCannotAttackRange())
-                        {
-                           movers.put(id, d);
-                           break;
-                        }
-                     }
-               }
-            }
-            if((attackers.size()+movers.size())*(rangerDamage-def)>=health)
-            {
-               boolean hasKilled = false;
-               for(int at: attackers)
-                  if(gc.canSenseUnit(en))
-                     gc.attack(at, en);
-                  else
-                  {
-                     System.out.println("Killed enemy unit at "+enLoc);
-                     break;
-                  }
-               for(int mo: movers.keySet())
-                  if(gc.canSenseUnit(en))
-                     if(gc.canMove(mo, movers.get(mo)))
-                     {
-                        gc.moveRobot(mo, movers.get(mo));
-                        gc.attack(mo, en);
-                     }
-                     else
-                     {
-                        System.out.println("Killed enemy unit at "+enLoc);
-                        break;
-                     }         
-            }
-         }
+         minRange = (int)gc.unit(id).rangerCannotAttackRange();
+         maxRange = (int)gc.unit(id).attackRange();
+         break;
       }
-      if(rangers.size()>10)
-         for(int id: rangers)
-         {
-            if(gc.unit(id).location().isInGarrison())
-               continue;
-            Pair cloEn = closestEnemy(unitPair(id), (int)gc.unit(id).rangerCannotAttackRange(), (int)gc.unit(id).attackRange());
-            if(tasks.get(id).getTask()!=6)
-               if(enemyUnits.size()==0)
-                  tasks.get(id).startMoving(cloEn, 0);
-               else
-                  tasks.get(id).startMoving(cloEn, 4);
-            System.out.println("ranger at "+unitPair(id)+" going to "+tasks.get(id).moveTarget);
-            move(id, false, null);
-         }
+      HashSet<Pair> all = new HashSet<Pair>();
+      for(Pair target: attackList)
+      {
+         VecMapLocation maxVec = gc.allLocationsWithin(eMapLoc[target.x][target.y], maxRange);
+         for(int x = 0; x < maxVec.size(); x++)
+            all.add(mapPair(maxVec.get(x)));
+      }
+      for(Pair target: attackList)
+      {
+         VecMapLocation minVec = gc.allLocationsWithin(eMapLoc[target.x][target.y], minRange);
+         for(int x = 0; x < minVec.size(); x++)
+            all.remove(mapPair(minVec.get(x)));
+      }
+      for(int id: rangers)
+      {
+         if(gc.unit(id).location().isInGarrison())
+            continue;
+         Pair cloEn = closestEnemy(unitPair(id), all);
+         if(tasks.get(id).getTask()!=6)
+            tasks.get(id).startMoving(cloEn, 0);
+         System.out.println("ranger at "+unitPair(id)+" going to "+tasks.get(id).moveTarget);
+         move(id, false, null);
+      }
       for(int id: rangers)
          if(!gc.unit(id).location().isInGarrison()&&gc.isAttackReady(id))
          {
@@ -1133,26 +1117,10 @@ import java.io.*;
    }
    public static Pair addDirection(Pair p, Direction d)
    {
-      int x = p.x;
-      int y = p.y;
-      if(d.equals(Direction.North))
-         return new Pair(x, y+1);
-      if(d.equals(Direction.Northeast))
-         return new Pair(x+1, y+1);
-      if(d.equals(Direction.East))
-         return new Pair(x+1, y);
-      if(d.equals(Direction.Southeast))
-         return new Pair(x+1, y-1);
-      if(d.equals(Direction.South))
-         return new Pair(x, y-1);
-      if(d.equals(Direction.Southwest))
-         return new Pair(x-1, y-1);
-      if(d.equals(Direction.West))
-         return new Pair(x-1, y);
-      if(d.equals(Direction.Northwest))
-         return new Pair(x-1, y+1);
-      if(d.equals(Direction.Center))
-         return new Pair(x, y);
+      int dx = dirMove.get(d).x;
+      int dy = dirMove.get(d).y;
+      if(inBounds(p.x+dx, p.y+dy))
+         return pairs[p.x+dx][p.y+dy];
       return null;
    }
    public static Direction oppositeDirection(Direction d)
@@ -1192,6 +1160,8 @@ import java.io.*;
    }
    public static boolean inBounds(Pair id)
    {
+      if(id==null)
+         return false;
       return id.x>=0&&id.x<eWidth&&id.y>=0&&id.y<eHeight;
    }
    public static boolean inBounds(int x, int y)
@@ -1207,7 +1177,7 @@ import java.io.*;
    }
    public static Pair mapPair(MapLocation m)
    {
-      return new Pair(m.getX(),m.getY());
+      return pairs[m.getX()][m.getY()];
    }
    public static Pair unitPair(int id)
    {
@@ -1412,7 +1382,10 @@ import java.io.*;
             case 1:
                startBuilding(bestSite(unitPair(unitID)));
                if(siteID[moveTarget.x][moveTarget.y]==-1)
+               {
                   siteID[moveTarget.x][moveTarget.y] = -2;
+                  newSite.add(pairs[moveTarget.x][moveTarget.y]);
+               }
                status = build(unitID, moveTarget);
                for(int factID: factories)
                   if(gc.canRepair(unitID, factID))
