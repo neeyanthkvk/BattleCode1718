@@ -19,7 +19,7 @@ import java.io.*;
    static Direction[] diagonals = {Direction.Northeast, Direction.Southeast, Direction.Northwest, Direction.Southwest};
    static Direction[] adjacent = {Direction.North, Direction.East, Direction.South, Direction.West, Direction.Northeast, Direction.Southeast, Direction.Northwest, Direction.Southwest};
    static HashMap<Direction, Pair> dirMove = new HashMap<Direction, Pair>();
-   static GameController gc = new GameController();
+   static GameController gc;
    static PlanetMap eMap = gc.startingMap(earth);
    static PlanetMap mMap = gc.startingMap(mars);
    static int eWidth = (int) eMap.getWidth();

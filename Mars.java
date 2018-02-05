@@ -7,7 +7,7 @@ import java.io.*;
  public class Mars {
    //Basic Info 
    static long totalTime = 0;
-   static GameController gc = new GameController();
+   static GameController gc;
    static int maxRound = 1000;   // the number of rounds
    static Planet earth = Planet.Earth;
    static Planet mars = Planet.Mars;
