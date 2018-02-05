@@ -1,11 +1,13 @@
+//ranger bug
+
 import bc.*;
 import java.util.*;
 import java.io.*;
 @SuppressWarnings("unchecked")
-public class Player {
+ public class Player {
 
    //Basic Info 
-   static PrintWriter out;
+   static long totalTime = 0;
    static int maxRound = 1000;   // the number of rounds
    static Planet earth = Planet.Earth;
    static Planet mars = Planet.Mars;
@@ -16,6 +18,7 @@ public class Player {
    static Direction[] cardinals = {Direction.North, Direction.East, Direction.South, Direction.West};
    static Direction[] diagonals = {Direction.Northeast, Direction.Southeast, Direction.Northwest, Direction.Southwest};
    static Direction[] adjacent = {Direction.North, Direction.East, Direction.South, Direction.West, Direction.Northeast, Direction.Southeast, Direction.Northwest, Direction.Southwest};
+   static HashMap<Direction, Pair> dirMove = new HashMap<Direction, Pair>();
    static GameController gc = new GameController();;
    static PlanetMap eMap = gc.startingMap(earth);
    static PlanetMap mMap = gc.startingMap(mars);
@@ -28,11 +31,13 @@ public class Player {
    static Random random = new Random(1);
    static boolean rocketResearched = false;
    static boolean[][] launchLoc = new boolean[mWidth][mHeight];
-   static int[][][][] moveDist = new int[eWidth][eHeight][][];
+   static int[][][][] moveDist = new int[eWidth][eHeight][eWidth][eHeight];
    static int[][] adjCount = new int[eWidth][eHeight];
+   static Pair[][] pairs = new Pair[eWidth][eHeight];
    
    //Unit Info
    static HashSet<Integer> myInit = new HashSet<Integer>();
+   static HashSet<Pair> newSite;
    static HashSet<Integer> myUnits;
    static HashSet<Integer> healers;
    static HashSet<Integer> factories;
@@ -59,25 +64,42 @@ public class Player {
    static boolean[][] viableSite = new boolean[eWidth][eHeight];
    static boolean[] open = new boolean[512];
    static int[][] siteID = new int[eWidth][eHeight];
+   static HashSet<Pair>[][] adjPair = new HashSet[eWidth][eHeight];
       
    static {
       try {
+         long startTime = System.nanoTime();
          System.out.println("first random is "+random.nextDouble());
+         
+         dirMove.put(Direction.North, new Pair(0, 1));
+         dirMove.put(Direction.Northeast, new Pair(1, 1));
+         dirMove.put(Direction.East, new Pair(1, 0));
+         dirMove.put(Direction.Southeast, new Pair(1, -1));
+         dirMove.put(Direction.South, new Pair(0, -1));
+         dirMove.put(Direction.Southwest, new Pair(-1, -1));
+         dirMove.put(Direction.West, new Pair(-1, 0));
+         dirMove.put(Direction.Northwest, new Pair(-1, 1));
+         dirMove.put(Direction.Center, new Pair(0, 0));
       
-      //log file
-         out = new PrintWriter(new File(myTeam+"_"+gc.planet()+"log.txt"));
+         for(int x = 0; x < eWidth; x++)
+            for(int y = 0; y < eHeight; y++)
+            {
+               pairs[x][y] = new Pair(x, y);
+               adjPair[x][y] = new HashSet<Pair>();
+            }
       
       //Research
          System.out.println("Queueing research");
          gc.queueResearch(UnitType.Worker);//25 // 25 Rounds - "Gimme some of that Black Stuff"
+         gc.queueResearch(UnitType.Rocket);//325// 100 Rounds - "Rocketry"
+         gc.queueResearch(UnitType.Rocket);//625// 100 Rounds - "Increased Capacity"
+         gc.queueResearch(UnitType.Rocket);//625// 100 Rounds - "Increased Capacity"
          gc.queueResearch(UnitType.Ranger);//50 // 25 Rounds - "Get in Fast"
          gc.queueResearch(UnitType.Ranger);//150// 100 Rounds - "Scopes"
          gc.queueResearch(UnitType.Worker);//225// 75 Rounds - "Time is of the Essence"
-         gc.queueResearch(UnitType.Rocket);//325// 100 Rounds - "Rocketry"
          gc.queueResearch(UnitType.Worker);//400// 75 Rounds - "Time is of the Essence II"
          gc.queueResearch(UnitType.Worker);//475// 75 Rounds - "Time is of the Essence III"
          gc.queueResearch(UnitType.Rocket);//525// 100 Rounds - "Rocket Boosters"
-         gc.queueResearch(UnitType.Rocket);//625// 100 Rounds - "Increased Capacity"
          System.out.println("Finished queueing research");
          
       //initializes eMapLoc, karbDep
@@ -118,20 +140,21 @@ public class Player {
                continue cycle;
             }
             LinkedList<Pair> q = new LinkedList<Pair>();
-            q.add(new Pair(i/3, i%3));
+            q.add(pairs[i/3][i%3]);
             array[i] = false;
             while(!q.isEmpty())
             {
                Pair p = q.remove();
-               for(Direction d: directions)
+               for(Direction d: adjacent)
                {
-                  Pair next = mapPair(eMapLoc[p.x][p.y].add(d));
-                  if(next.x>=0&&next.x<3&&next.y>=0&&next.y<3)
-                     if(array[next.x*3+next.y])
-                     {
-                        array[next.x*3+next.y] = false;
-                        q.add(next);
-                     }
+                  Pair next = addDirection(p, d);
+                  if(next!=null)
+                     if(next.x>=0&&next.x<3&&next.y>=0&&next.y<3)
+                        if(array[next.x*3+next.y])
+                        {
+                           array[next.x*3+next.y] = false;
+                           q.add(next);
+                        }
                }
             }
             for(int n = 0; n < 9; n++)
@@ -170,7 +193,7 @@ public class Player {
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
                try {
-                  karbAdj[x][y] = countKarbAdj(new Pair(x, y), false);
+                  karbAdj[x][y] = countKarbAdj(pairs[x][y], false);
                } 
                catch(Exception e) {e.printStackTrace();}
          System.out.println("Finished finding karbonite sums");
@@ -194,46 +217,80 @@ public class Player {
                   if(regions[x][y]!=0||eMap.isPassableTerrainAt(eMapLoc[x][y])==0)
                      continue cycle;
                   regionCount++;
-                  floodRegion(new Pair(x, y), regionCount);
+                  floodRegion(pairs[x][y], regionCount);
                   for(int id: myUnits)
                      if(regions[unitPair(id).x][unitPair(id).y]==regions[x][y])
                         continue cycle;
                   unreachable.add(regions[x][y]);
                } 
                catch(Exception e) {e.printStackTrace();}
+               
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
                if(unreachable.contains(regions[x][y]))
                   regions[x][y] = -1*regions[x][y];
          System.out.println("Finished finding regions");
          
+         //initializes adjPair
+         for(int x = 0; x < eWidth; x++)
+            for(int y = 0; y < eHeight; y++)
+               for (int dx = -1; dx <= 1; dx++)
+                  for (int dy = -1; dy <= 1; dy++)
+                  {
+                     int newX = x+dx;
+                     int newY = y+dy;
+                     if(inBounds(newX, newY))
+                        if(regions[newX][newY]!=0)
+                           adjPair[x][y].add(pairs[newX][newY]);
+                  }
+                  
       //initializes adjCount
          System.out.println("Finding adjacent counts");
          for(int x = 0; x < eWidth; x++)
             for(int y = 0; y < eHeight; y++)
                for(Direction d: adjacent)
                {
-                  Pair p = mapPair(eMapLoc[x][y].add(d));
+                  Pair p = addDirection(pairs[x][y], d);
                   if(inBounds(p)&&regions[p.x][p.y]!=0)
                      adjCount[p.x][p.y]++;
                }
          
       //initializes moveDist
          System.out.println("Finding moveDist");
-         // for(int x = 0; x < eWidth; x++)
-            // for(int y = 0; y < eHeight; y++)
-            // {
-               // moveDist[x][y] = initPath(new Pair(x, y));
-               // if(x==3&&y==0)
-                  // for(int b = 0; b < eHeight; b++)
-                  // {
-                     // for(int a = 0; a < eWidth; a++)
-                     // {
-                        // System.out.print(moveDist[x][y][a][b]+" ");
-                     // }
-                     // System.out.println();
-                  // }
-            // }
+         for(int x = 0; x < eWidth; x++)
+            for(int y = 0; y < eHeight; y++)
+            {
+               for(int a = 0; a < eWidth; a++)
+                  for(int b = 0; b < eHeight; b++)
+                     moveDist[x][y][a][b] = -1;
+               moveDist[x][y][x][y] = 0;
+            }
+         ArrayDeque<Pair> q = new ArrayDeque<Pair>();
+         for(int x = 0; x < eWidth; x++)
+         {
+            for(int y = 0; y < eHeight; y++)
+            {
+               long time = System.nanoTime();
+               if(regions[x][y]==0)
+               {
+                  //System.out.println("("+x+", "+y+") is not passable");
+                  continue;
+               }
+               q.addFirst(pairs[x][y]);
+               cycle: while(!q.isEmpty())
+               {
+                  Pair cur = q.removeLast();
+                  for(Pair next: adjPair[cur.x][cur.y])
+                     if(moveDist[x][y][next.x][next.y]==-1)
+                     {
+                        moveDist[x][y][next.x][next.y] = moveDist[x][y][cur.x][cur.y]+1;
+                        q.addFirst(next);
+                     }
+               }   
+               //System.gc();
+               //System.out.println(" ("+x+", "+y+") Time taken: "+(System.nanoTime()-time)/1000000.0+" ms");
+            }
+         }
                
       //finds viable sites
          System.out.println("Finding viable sites");
@@ -260,6 +317,8 @@ public class Player {
                tasks.get(id).taskType = 0; 
                minerCount++;
             }
+         totalTime+=System.nanoTime()-startTime;
+         System.out.println("Took "+totalTime/1000000.0+" ms to initialize");
       //end of initialization
       } 
       catch(Exception e) {e.printStackTrace();}
@@ -278,34 +337,47 @@ public class Player {
       //rounds 1-1000
       while(gc.round()<=maxRound)
       {
+         long startTime = System.nanoTime();
          try
          {
             System.out.println("Earth Round "+gc.round()+": ");
-            //System.out.println("Time left: "+gc.getTimeLeftMs());
             updateUnits();
                      
             for(int id: myUnits)
                try
                {
-                  if(gc.unit(id).location().isInGarrison())
+                  if(!usable(id)||isStructure(id))
                      continue;
                   Pair start = unitPair(id);
                   Pair roc = closestRocket(id);
                   if(roc!=null)
                   {
-                     moveDist[roc.x][roc.y] = initPath(roc);
-                     if(moveDist[roc.x][roc.y][start.x][start.y]<5||gc.round()>650)
+                     if(moveDist[roc.x][roc.y][start.x][start.y]<10)
+                     {
                         tasks.get(id).startLoading();
+                     }
                   }
+                  if(tasks.get(id).toSpace)
+                     for(int rID: rockets)
+                     {
+                        System.out.println("attempting to load "+start+" to "+unitPair(rID));
+                        if(gc.canLoad(rID, id))
+                        {
+                           System.out.println(unitPair(id)+" has loaded");
+                           gc.load(rID, id);
+                        }
+                     }
                }
                catch(Exception e)
                {
                   e.printStackTrace();
                }
-         
+               
             for(int id: workers)
                try
                {
+                  if(!usable(id))
+                     continue;
                   Pair start = unitPair(id);
                   int val = tasks.get(id).doTask();
                }
@@ -313,6 +385,7 @@ public class Player {
                {
                   e.printStackTrace();
                }
+               
             for(int id: factories)
                try
                {
@@ -324,13 +397,17 @@ public class Player {
                {
                   e.printStackTrace();
                }
+               
             try {
                rangerTask();
             } catch(Exception e) {e.printStackTrace();}
+            
             for(int id: rockets)
                try {
+                  if(!usable(id))
+                     continue;
                   Unit u = gc.unit(id);
-                  if(u.health()<u.maxHealth())
+                  if(u.health()<u.maxHealth()||gc.round()>740)
                      if(u.structureGarrison().size()>0)
                         if(u.structureIsBuilt()!=0)
                            launch(id);
@@ -343,16 +420,58 @@ public class Player {
                }
          } 
          catch(Exception e) {e.printStackTrace();} 
+            //System.gc();
+         totalTime+=System.nanoTime()-startTime;
+         System.out.println("Earth Round "+gc.round()+" took "+(System.nanoTime()-startTime)/1000000.0+" ms");
+         System.out.println("Earth Round "+gc.round()+" ended at "+(totalTime)/1000000.0+" ms");
          gc.nextTurn();
       }
          //End of match
    }
    public static void mars() {
-      // Do Something
       while(gc.round()<=maxRound)
       {
-         System.out.println("Mars Round: "+gc.round());
-         //System.out.println("Time left: "+gc.getTimeLeftMs());
+         long startTime = System.nanoTime();
+         try
+         {
+            System.out.println("Mars Round "+gc.round()+": ");
+            updateUnits();
+                     
+            for(int id: workers)
+               try
+               {
+                  if(!usable(id))
+                     continue;
+                  Pair start = unitPair(id);
+                  int val = tasks.get(id).doTask();
+               }
+               catch(Exception e)
+               {
+                  e.printStackTrace();
+               }
+               
+            try {
+               rangerTask();
+            } catch(Exception e) {e.printStackTrace();}
+            
+            for(int id: rockets)
+               try {
+                  if(!usable(id))
+                     continue;
+                  for(Direction d: adjacent)
+                     if(gc.canUnload(id, d))
+                        gc.unload(id, d);
+               }
+               catch(Exception e)
+               {
+                  e.printStackTrace();
+               }
+         } 
+         catch(Exception e) {e.printStackTrace();} 
+            //System.gc();
+         totalTime+=System.nanoTime()-startTime;
+         System.out.println("Mars Round "+gc.round()+" took "+(System.nanoTime()-startTime)/1000000.0+" ms");
+         System.out.println("Mars Round "+gc.round()+" ended at "+(totalTime)/1000000.0+" ms");
          gc.nextTurn();
       }
    }
@@ -372,7 +491,7 @@ public class Player {
          return -2;
    }
    //worker id, structure id, -2 means on top of site, -1 means too far away, 0 means build success, 1 means structure is finished
-   public static int build(int id, Pair target, UnitType ut) 
+   public static int build(int id, Pair target) 
    {
       Pair start = unitPair(id);
       //System.out.println("Unit at "+p+" is trying to build at "+target+" which has "+siteID[target.x][target.y]);
@@ -384,13 +503,12 @@ public class Player {
          return -11;
       }
       if(siteID[target.x][target.y]==-2)
-         return blueprint(id, target, ut);
+         return blueprint(id, target);
       int sID = siteID[target.x][target.y];
       if(gc.unit(sID).structureIsBuilt()!=0)
          return 1;
       if(gc.canBuild(id, sID))
       {
-         System.out.println(start+" building "+sID);
          gc.build(id, sID);
       }
       else
@@ -400,11 +518,10 @@ public class Player {
       return 0;
    }
    //returns the id of the blueprinted structure, -5 if too far away, -4 if not enough resources, -3 if being blocked
-   public static int blueprint(int id, Pair target, UnitType ut)
+   public static int blueprint(int id, Pair target)
    {
-      if(rocketResearched&&random.nextDouble()<(gc.round()/750)&&factories.size()>rockets.size())
-         ut = UnitType.Rocket;
-      if(factories.size()>=5)
+      UnitType ut = UnitType.Factory;
+      if(factories.size()>=3)
          ut = UnitType.Rocket;
       Pair p = unitPair(id);
       //System.out.println("Unit at "+p+" is trying to blueprint at "+target);
@@ -418,6 +535,10 @@ public class Player {
          tasks.put(blueID, new Task(blueID));
          tasks.get(blueID).taskType = 2;
          siteID[target.x][target.y] = blueID;
+         if(ut.equals(UnitType.Factory))
+            factories.add(blueID);
+         else
+            rockets.add(blueID);
          return 0;
       }
       if(gc.karbonite()<100)
@@ -429,7 +550,7 @@ public class Player {
    public static int mine(int id)
    {
       Unit u = gc.unit(id);
-      Pair p = mapPair(u.location().mapLocation());
+      Pair p = unitPair(id);
       int xPos = p.x;
       int yPos = p.y;
       Direction best = null;
@@ -437,9 +558,9 @@ public class Player {
       for(Direction d: directions)
          try
          {
-            MapLocation loc = eMapLoc[p.x][p.y].add(d);
-            if(inBounds(mapPair(loc)))
-               if(gc.karboniteAt(loc)>max)
+            Pair loc = addDirection(p, d);
+            if(inBounds(loc))
+               if(gc.karboniteAt(eMapLoc[loc.x][loc.y])>max)
                {
                   best = d;
                   max = (int)gc.karboniteAt(eMapLoc[p.x][p.y].add(d));
@@ -472,7 +593,7 @@ public class Player {
          for(Direction d: possible)
             if(gc.canMove(id, d))
             {
-               Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
+               Pair dest = addDirection(start, d);
                if(siteID[dest.x][dest.y]!=-1)
                   continue;
                gc.moveRobot(id, d);
@@ -480,7 +601,7 @@ public class Player {
             }
          for(Direction d: possible)
          {
-            Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
+            Pair dest = addDirection(start, d);
             if(siteID[dest.x][dest.y]!=-1)
                continue;
             try {
@@ -507,7 +628,7 @@ public class Player {
          for(Direction d: adjacent)
             if(gc.canMove(id, d))
             {
-               Pair dest = mapPair(eMapLoc[start.x][start.y].add(d));
+               Pair dest = addDirection(start, d);
                if(siteID[dest.x][dest.y]!=-1)
                   continue;
                try {
@@ -542,21 +663,28 @@ public class Player {
          return;
       // if(val>minerProb||val>builderProb)
          // return;
-      boolean noMiners = minerCount==0;
+      boolean noMiners = minerCount==0&&bestMine(id)!=null;
       boolean noBuilders = builderCount==0;
-      boolean toRep = (tasks.get(id).taskType==0&&minerCount<5)||(tasks.get(id).taskType==1&&builderCount<5);
-      if(noBuilders||noMiners||toRep)
+      int type = -1;
+      if(tasks.get(id).taskType==0&&minerCount<5)
+         type = 0;
+      else if(tasks.get(id).taskType==1&&builderCount<5)
+         type = 1;
+      else if(noMiners)
+         type = 0;
+      else if(noBuilders)
+         type = 1;
+      if(type!=-1)
       {
          Pair start = unitPair(id);
          Pair target = tasks.get(id).moveTarget;
          int targetDist = tasks.get(id).targetDist;
-         moveDist[target.x][target.y] = initPath(target);
          Direction best = null;
          int bestDist = 0;
          for(Direction d: adjacent)
             if(gc.canReplicate(id, d))
             {
-               Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
+               Pair next = addDirection(start, d);
                if(siteID[next.x][next.y]==-1)
                {
                   if(best==null||Math.abs(moveDist[target.x][target.y][next.x][next.y]-targetDist)<Math.abs(bestDist-targetDist))
@@ -573,17 +701,7 @@ public class Player {
             int newID = gc.senseUnitAtLocation(repLoc).id();
             //System.out.println("oldid "+id+" vs newid "+newID);
             tasks.put(newID, new Task(newID));
-            if(noMiners)
-            {
-               tasks.get(newID).taskType = 0;
-               minerCount++;
-            }
-            else if(noBuilders)
-            {
-               tasks.get(newID).taskType = 1;
-               builderCount++;
-            }
-            else if(tasks.get(id).taskType==0)
+            if(type==0)
             {
                tasks.get(newID).taskType = 0;
                minerCount++;
@@ -620,6 +738,7 @@ public class Player {
       rangers = new HashSet<Integer>();
       rockets = new HashSet<Integer>();
       workers = new HashSet<Integer>();
+      newSite = new HashSet<Pair>();
       minerCount = 0;
       builderCount = 0;
       for(int x = 0; x < eWidth; x++)
@@ -631,6 +750,7 @@ public class Player {
       for(int id: myUnits)
       {
          UnitType ut = gc.unit(id).unitType();
+         Location uLoc = gc.unit(id).location();
          if(ut.equals(UnitType.Factory))
          {
             factories.add(id);
@@ -671,7 +791,10 @@ public class Player {
                      builderCount++;
                      if(tasks.get(id).moveTarget!=null)
                         if(siteID[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]==-1)
+                        {
                            siteID[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]=-2;
+                           //newSite.add(pairs[tasks.get(id).moveTarget.x][tasks.get(id).moveTarget.y]);
+                        }
                   }
                }
             } 
@@ -683,7 +806,7 @@ public class Player {
       }
       enemyUnits.clear();
       for(int id: myUnits)
-         if(!gc.unit(id).location().isInGarrison())
+         if(usable(id))
          {
             VecUnit vu = gc.senseNearbyUnitsByTeam(gc.unit(id).location().mapLocation(), 5000, enemyTeam);
             for(int x = 0; x < vu.size(); x++)
@@ -712,11 +835,11 @@ public class Player {
                if(mMap.isPassableTerrainAt(mMapLoc[x][y])!=0)
                {
                   gc.launchRocket(id, mMapLoc[x][y]);
+                  launchLoc[x][y] = true;
                }
    }
    public static HashSet<Direction> nextMove(Pair start, Pair end, int goal)
    {
-      moveDist[end.x][end.y] = initPath(end);
       if(end==null||moveDist[end.x][end.y][start.x][start.y]==goal)
          return null;
       int curDist = moveDist[end.x][end.y][start.x][start.y];
@@ -736,60 +859,11 @@ public class Player {
       HashSet<Direction> possible = new HashSet<Direction>();
       for(Direction d: adjacent)
       {
-         Pair next = mapPair(eMapLoc[start.x][start.y].add(d));
+         Pair next = addDirection(start, d);
          if(inBounds(next)&&moveDist[end.x][end.y][next.x][next.y]==curDist+direction)
             possible.add(d);
       }
       return possible;
-   }
-   public static int[][] initPath(Pair start)
-   {
-      if(moveDist[start.x][start.y]!=null)
-         return moveDist[start.x][start.y];
-      moveDist[start.x][start.y] = new int[eWidth][eHeight];
-      HashSet<Direction>[][] moves = new HashSet[eWidth][eHeight];
-      for(int x = 0; x < eWidth; x++)
-         for(int y = 0; y < eHeight; y++)
-         {
-            moves[x][y] = new HashSet<Direction>();
-            if(regions[x][y]!=0)
-               for(Direction d: adjacent)
-               {
-                  Pair next = mapPair(eMapLoc[x][y].add(d));
-                  if(inBounds(next)&&regions[next.x][next.y]!=0)
-                     moves[x][y].add(d);
-               }
-         }
-   
-      int[][] dist = new int[eWidth][eHeight];
-      boolean[][] used = new boolean[eWidth][eHeight];
-      for(int x = 0; x < eWidth; x++)
-         for(int y = 0; y < eHeight; y++)
-            dist[x][y] = -1;
-      if(regions[start.x][start.y]==0)
-         return dist;
-      dist[start.x][start.y] = 0;
-      used[start.x][start.y] = true;
-      LinkedList<Pair> q = new LinkedList<Pair>();
-      q.add(start);
-      cycle: while(!q.isEmpty())
-      {
-         Pair cur = q.remove();
-         for(Direction d: moves[cur.x][cur.y])
-         {
-            Pair next = mapPair(eMapLoc[cur.x][cur.y].add(d));
-            if(dist[next.x][next.y]==-1)
-            {
-               dist[next.x][next.y] = dist[cur.x][cur.y]+1;
-               q.add(next);
-               moves[next.x][next.y].remove(oppositeDirection(d));
-               //if(start.x==3&&start.y==0)
-                  //System.out.println("cur.x :"+cur.x+" cur.y: "+cur.y+" d: "+d);
-            }
-         }
-         moves[cur.x][cur.y].clear();
-      }   
-      return dist;
    }
          //floodfills map to assign region numbers
    public static void floodRegion(Pair p, int c)
@@ -801,9 +875,9 @@ public class Player {
       while(!q.isEmpty())
       {
          Pair id = q.remove();
-         for(Direction d: directions)
+         for(Direction d: adjacent)
             try{
-               Pair next = mapPair(eMapLoc[id.x][id.y].add(d));  
+               Pair next = addDirection(id, d); 
                if(inBounds(next)&&regions[next.x][next.y]==0&&eMap.isPassableTerrainAt(eMapLoc[next.x][next.y])!=0)
                {
                   regions[next.x][next.y] = c; 
@@ -815,7 +889,6 @@ public class Player {
    }
    public static Pair bestSite(Pair p)
    {
-      moveDist[p.x][p.y] = initPath(p);
       int minID = -1;
       int dist = 0;
       for(int id: rockets)
@@ -823,7 +896,7 @@ public class Player {
          if(gc.unit(id).structureIsBuilt()!=0)
             continue;
          Pair loc = unitPair(id);
-         if(moveDist[p.x][p.y][loc.x][loc.y]<5)
+         if(moveDist[p.x][p.y][loc.x][loc.y]<7)
             if(minID==-1||moveDist[p.x][p.y][loc.x][loc.y]<dist)
             {
                minID = id;
@@ -835,7 +908,7 @@ public class Player {
          if(gc.unit(id).structureIsBuilt()!=0)
             continue;
          Pair loc = unitPair(id);
-         if(moveDist[p.x][p.y][loc.x][loc.y]<5)
+         if(moveDist[p.x][p.y][loc.x][loc.y]<7)
             if(minID==-1||moveDist[p.x][p.y][loc.x][loc.y]<dist)
             {
                minID = id;
@@ -843,7 +916,26 @@ public class Player {
             }
       }
       if(minID!=-1)
+      {
+         System.out.println("using unfinished "+unitPair(minID));
          return unitPair(minID);
+      }
+      Pair bestSite = null;
+      dist = 0;
+      for(Pair site: newSite)
+      {
+         if(moveDist[p.x][p.y][site.x][site.y]<7)
+            if(bestSite==null||moveDist[p.x][p.y][site.x][site.y]<dist)
+            {
+               bestSite = site;
+               dist = moveDist[p.x][p.y][site.x][site.y];
+            }
+      }
+      if(bestSite!=null)
+      {
+         System.out.println("using potential "+bestSite);
+         return bestSite;
+      }
       LinkedList<Pair> q = new LinkedList<Pair>();
       boolean[][] used = new boolean[eWidth][eHeight];
       q.add(p);
@@ -852,7 +944,7 @@ public class Player {
          Pair cur = q.remove();
          cycle: for(Direction d: adjacent)
          {
-            Pair site = mapPair(eMapLoc[cur.x][cur.y].add(d));
+            Pair site = addDirection(cur, d);
             if(inBounds(site)&&!used[site.x][site.y]&&regions[site.x][site.y]!=0)
             {
                used[site.x][site.y] = true;
@@ -893,112 +985,60 @@ public class Player {
          ret.remove(mapPair(minVec.get(y)));
       return ret;
    }
-   public static Pair closestEnemy(Pair start, int minRange, int maxRange)
+   public static Pair closestEnemy(Pair start, HashSet<Pair> all)
    {
-      moveDist[start.x][start.y] = initPath(start);
       Pair best = null;
       int bestScore = 100000;
-      for(Pair en: attackList)
+      for(Pair end: all)
       {
-         HashSet<Pair> possible = locWithin(en, minRange, maxRange);
-         int min = Integer.MAX_VALUE;
-         for(Pair end: possible)
-            if(moveDist[start.x][start.y][end.x][end.y]!=-1)
-            {
-               min = Math.min(min, moveDist[start.x][start.y][end.x][end.y]);
-            }
-         if(min<bestScore)
+         int score = moveDist[start.x][start.y][end.x][end.y];
+         if(score==-1)
+            continue;
+         if(score<bestScore)
          {
-            best = en;
-            bestScore = min;
+            best = end;
+            bestScore = score;
          }
       }
       return best;
    }
    public static void rangerTask()
    {
-      HashSet<Integer> killed = new HashSet<Integer>();
-      if(enemyUnits!=null)
-      {
-         for(int en: enemyUnits)
-         {
-            HashSet<Integer> canAttack = new HashSet<Integer>();
-            for(int id: rangers)
-            {
-               if(gc.unit(id).location().isInGarrison())
-                  continue;
-               if(gc.isAttackReady(id))
-                  canAttack.add(id);
-            }
-            Pair enLoc = unitPair(en);
-            int count = 0;
-            int health = (int) gc.unit(en).health();
-            int def = 0;
-            if(gc.unit(en).unitType().equals(UnitType.Knight))
-               def = knightDefense;
-            HashSet<Integer> attackers = new HashSet<Integer>();
-            HashMap<Integer, Direction> movers = new HashMap<Integer, Direction>();
-            for(int id: canAttack)
-            {
-               Pair loc = unitPair(id);
-               if(gc.canAttack(id, en))
-                  attackers.add(id);
-               else
-               {
-                  for(Direction d: adjacent)
-                     if(gc.canMove(id, d)&&gc.isMoveReady(id))
-                     {
-                        int diff = (int)eMapLoc[loc.x][loc.y].add(d).distanceSquaredTo(eMapLoc[enLoc.x][enLoc.y]);
-                        if(diff<=gc.unit(id).attackRange()&&diff>gc.unit(id).rangerCannotAttackRange())
-                        {
-                           movers.put(id, d);
-                           break;
-                        }
-                     }
-               }
-            }
-            if((attackers.size()+movers.size())*(rangerDamage-def)>=health)
-            {
-               boolean hasKilled = false;
-               for(int at: attackers)
-                  if(gc.canSenseUnit(en))
-                     gc.attack(at, en);
-                  else
-                  {
-                     System.out.println("Killed enemy unit at "+enLoc);
-                     break;
-                  }
-               for(int mo: movers.keySet())
-                  if(gc.canSenseUnit(en))
-                     if(gc.canMove(mo, movers.get(mo)))
-                     {
-                        gc.moveRobot(mo, movers.get(mo));
-                        gc.attack(mo, en);
-                     }
-                     else
-                     {
-                        System.out.println("Killed enemy unit at "+enLoc);
-                        break;
-                     }         
-            }
-         }
-      }
-      if(rangers.size()>10)
-         for(int id: rangers)
-         {
-            if(gc.unit(id).location().isInGarrison())
-               continue;
-            Pair cloEn = closestEnemy(unitPair(id), (int)gc.unit(id).rangerCannotAttackRange(), (int)gc.unit(id).attackRange());
-            if(tasks.get(id).getTask()!=6)
-               if(enemyUnits.size()==0)
-                  tasks.get(id).startMoving(cloEn, 0);
-               else
-                  tasks.get(id).startMoving(cloEn, 4);
-            System.out.println("ranger at "+unitPair(id)+" going to "+tasks.get(id).moveTarget);
-            move(id, false, null);
-         }
+      if(rangers.size()==0)
+         return;
+      int minRange = 0;
+      int maxRange = 0;
       for(int id: rangers)
-         if(!gc.unit(id).location().isInGarrison()&&gc.isAttackReady(id))
+      {
+         minRange = (int)gc.unit(id).rangerCannotAttackRange();
+         maxRange = (int)gc.unit(id).attackRange();
+         break;
+      }
+      HashSet<Pair> all = new HashSet<Pair>();
+      for(Pair target: attackList)
+      {
+         VecMapLocation maxVec = gc.allLocationsWithin(eMapLoc[target.x][target.y], maxRange);
+         for(int x = 0; x < maxVec.size(); x++)
+            all.add(mapPair(maxVec.get(x)));
+      }
+      for(Pair target: attackList)
+      {
+         VecMapLocation minVec = gc.allLocationsWithin(eMapLoc[target.x][target.y], minRange);
+         for(int x = 0; x < minVec.size(); x++)
+            all.remove(mapPair(minVec.get(x)));
+      }
+      for(int id: rangers)
+      {
+         if(!usable(id))
+            continue;
+         Pair cloEn = closestEnemy(unitPair(id), all);
+         if(tasks.get(id).getTask()!=6)
+            tasks.get(id).startMoving(cloEn, 0);
+         //System.out.println("ranger at "+unitPair(id)+" going to "+tasks.get(id).moveTarget);
+         move(id, false, null);
+      }
+      for(int id: rangers)
+         if(usable(id)&&gc.isAttackReady(id))
          {
             VecUnit vu = gc.senseNearbyUnitsByTeam(eMapLoc[unitPair(id).x][unitPair(id).y], gc.unit(id).attackRange(), enemyTeam);
             TreeSet<Enemy> leftovers = new TreeSet<Enemy>();
@@ -1031,7 +1071,7 @@ public class Player {
          karbAdjOrder.add(new KarbAdjacent(id, karbAdj[id.x][id.y]));
          for(Direction d: directions)
             try{
-               Pair next = mapPair(eMapLoc[id.x][id.y].add(d));   
+               Pair next = addDirection(id, d);   
                if(inBounds(next)&&!used[next.x][next.y]&&regions[next.x][next.y]!=0)
                {
                   used[next.x][next.y] = true;
@@ -1080,8 +1120,8 @@ public class Player {
                   return cur;
          for(Direction d: adjacent)
          {
-            Pair next = mapPair(eMapLoc[cur.x][cur.y].add(d));
-            if(inBounds(next)&&!used[next.x][next.y])
+            Pair next = addDirection(cur, d);
+            if(inBounds(next)&&!used[next.x][next.y]&&regions[next.x][next.y]!=0)
             {
                q.add(next);
                used[next.x][next.y] = true;
@@ -1113,15 +1153,14 @@ public class Player {
       if(ut.equals(UnitType.Ranger))
          minRange = (int) gc.unit(id).rangerCannotAttackRange();
       set = locWithin(unitPair(id), minRange, range);
-      moveDist[start.x][start.y] = initPath(start);
       for(Pair p: set)
          if(moveDist[p.x][p.y][start.x][start.y]!=-1&&moveDist[p.x][p.y][start.x][start.y]*cooldown<25)
             return false;
       return true;
    }
-   public static boolean inGarrison(int id)
+   public static boolean usable(int id)
    {
-      return gc.unit(id).location().isInGarrison();
+      return !gc.unit(id).location().isInGarrison()&&!gc.unit(id).location().isInSpace();
    }
    public static boolean isCardinal(Pair p1, Pair p2)
    {
@@ -1148,6 +1187,14 @@ public class Player {
    public static boolean isStructure(int id)
    {
       return gc.unit(id).unitType().equals(UnitType.Factory)||gc.unit(id).unitType().equals(UnitType.Rocket);   
+   }
+   public static Pair addDirection(Pair p, Direction d)
+   {
+      int dx = dirMove.get(d).x;
+      int dy = dirMove.get(d).y;
+      if(inBounds(p.x+dx, p.y+dy))
+         return pairs[p.x+dx][p.y+dy];
+      return null;
    }
    public static Direction oppositeDirection(Direction d)
    {
@@ -1186,6 +1233,8 @@ public class Player {
    }
    public static boolean inBounds(Pair id)
    {
+      if(id==null)
+         return false;
       return id.x>=0&&id.x<eWidth&&id.y>=0&&id.y<eHeight;
    }
    public static boolean inBounds(int x, int y)
@@ -1201,7 +1250,7 @@ public class Player {
    }
    public static Pair mapPair(MapLocation m)
    {
-      return new Pair(m.getX(),m.getY());
+      return pairs[m.getX()][m.getY()];
    }
    public static Pair unitPair(int id)
    {
@@ -1214,7 +1263,6 @@ public class Player {
    public static Pair closestRocket(int id)
    {
       Pair start = unitPair(id);
-      moveDist[start.x][start.y] = initPath(start);
       int bestPathSize = 0;
       Pair bestPair = null;
       for(int ro: rockets)
@@ -1298,8 +1346,7 @@ public class Player {
       int targetDist = 0;
       Pair moveTarget = null; //for moving: final destination
       UnitType produceType = null; //for producing: type of robot
-      UnitType buildType = null;
-      boolean halting = false;
+      boolean toSpace = false;
       public Task(int id)
       {
          unitID = id;
@@ -1324,7 +1371,6 @@ public class Player {
       {
          if(target==null)
          {
-            System.out.println(unitPair(unitID)+" to "+target+" is switching tasks");
             return false;
          }
          typeOn[0] = maxStep++;
@@ -1332,14 +1378,11 @@ public class Player {
          usedMine[target.x][target.y] = unitID;
          return true;
       }
-      public boolean startBuilding(Pair site, UnitType ut)
+      public boolean startBuilding(Pair site)
       {
-         if(gc.round()>325&&Math.random()<0.2)
-            ut = UnitType.Rocket;
          Pair cur = unitPair(unitID);
          //System.out.println("The unit at "+unitPair(unitID)+" is going to build at "+site);
          typeOn[1] = maxStep++;
-         buildType = ut;
          startMoving(site, 1);
          return true;
       }
@@ -1354,8 +1397,9 @@ public class Player {
          Pair closest = closestRocket(unitID);
          if(closest==null)
             return false;
+         System.out.println(unitPair(unitID)+" is trying to space");
+         toSpace = true;
          startMoving(closest, 1);
-         typeOn[6] = maxStep++;
          return true;
       }
       //return task number
@@ -1377,7 +1421,6 @@ public class Player {
       3: blueprint
       4: attack
       5: heal
-      6: load
       */
       public int doTask()
       {
@@ -1387,8 +1430,11 @@ public class Player {
             if(taskType==0)
                startMining(bestMine(unitID));
             if(taskType==1)
-               startBuilding(bestSite(unitPair(unitID)), UnitType.Factory);
+               startBuilding(bestSite(start));
          }
+         start = unitPair(unitID);
+         if(toSpace)
+            startLoading();
          if(moveTarget!=null)
             move(unitID, false, null);
          int ret = 0;
@@ -1398,7 +1444,8 @@ public class Player {
             case 0:
                if(!startMining(bestMine(unitID)))
                {
-                  startBuilding(bestSite(start), UnitType.Factory);
+                  System.out.println(start+" is switching tasks");
+                  startBuilding(bestSite(start));
                   taskType = 1;
                }
                else 
@@ -1409,10 +1456,14 @@ public class Player {
                   break;
                }
             case 1:
-               startBuilding(bestSite(unitPair(unitID)), UnitType.Factory);
+               startBuilding(bestSite(unitPair(unitID)));
+               System.out.println(start+" buildtarget is "+moveTarget);
                if(siteID[moveTarget.x][moveTarget.y]==-1)
+               {
                   siteID[moveTarget.x][moveTarget.y] = -2;
-               status = build(unitID, moveTarget, buildType);
+                  newSite.add(pairs[moveTarget.x][moveTarget.y]);
+               }
+               status = build(unitID, moveTarget);
                for(int factID: factories)
                   if(gc.canRepair(unitID, factID))
                      gc.repair(unitID, factID);
@@ -1426,7 +1477,7 @@ public class Player {
                   cycle: while(working)
                   {
                      working = false;
-                     for(Direction d: cardinals)
+                     for(Direction d: adjacent)
                         if(gc.canUnload(unitID, d))
                         {
                            gc.unload(unitID, d);
@@ -1447,8 +1498,6 @@ public class Player {
                else
                   ret = -1;
                break;
-            case 6:
-            
             default:
                {
                   if(unitType(unitID).equals(UnitType.Worker))
