@@ -19,17 +19,16 @@ import java.io.*;
    static Direction[] diagonals = {Direction.Northeast, Direction.Southeast, Direction.Northwest, Direction.Southwest};
    static Direction[] adjacent = {Direction.North, Direction.East, Direction.South, Direction.West, Direction.Northeast, Direction.Southeast, Direction.Northwest, Direction.Southwest};
    static HashMap<Direction, Pair> dirMove = new HashMap<Direction, Pair>();
-   static PlanetMap mMap = gc.startingMap(mars);
-   static int mWidth = (int) mMap.getWidth();
-   static int mHeight = (int) mMap.getHeight();
-   static Team myTeam = gc.team();
+   static PlanetMap mMap;
+   static int mWidth;
+   static int mHeight;
+   static Team myTeam;
    static Team enemyTeam;
    static Random random = new Random(1);
    static boolean rocketResearched = false;
-   static boolean[][] launchLoc = new boolean[mWidth][mHeight];
-   static int[][][][] moveDist = new int[mWidth][mHeight][mWidth][mHeight];
-   static int[][] adjCount = new int[mWidth][mHeight];
-   static Pair[][] pairs = new Pair[mWidth][mHeight];
+   static int[][][][] moveDist;
+   static int[][] adjCount;
+   static Pair[][] pairs;
    
    
    //Unit Info
@@ -49,25 +48,42 @@ import java.io.*;
    static HashSet<Pair> attackList = new HashSet<Pair>();
    
    // Map Info
-   static MapLocation[][] mMapLoc = new MapLocation[mWidth][mHeight];
-   static int[][] karbDep = new int[mWidth][mHeight];//amount of karbonite in the square
-   static int[][] initKarb = new int[mWidth][mHeight];
-   static int[][] karbAdj = new int[mWidth][mHeight];//sum of karbonite on and adjacent to the square
-   static int[][] regions = new int[mWidth][mHeight];
+   static MapLocation[][] mMapLoc;
+   static int[][] karbDep;//amount of karbonite in the square
+   static int[][] initKarb;
+   static int[][] karbAdj;//sum of karbonite on and adjacent to the square
+   static int[][] regions;
    static int regionCount = 0;
-   static int[][] usedMine = new int[mWidth][mHeight];
-   static boolean[][] viableSite = new boolean[mWidth][mHeight];
+   static int[][] usedMine;
+   static boolean[][] viableSite;
+   static int[][] siteID;
+   static HashSet<Pair>[][] adjPair;
    static boolean[] open = new boolean[512];
-   static int[][] siteID = new int[mWidth][mHeight];
-   static HashSet<Pair>[][] adjPair = new HashSet[mWidth][mHeight];
    static AsteroidStrike[] asteroids = new AsteroidStrike[maxRound+1];
       
    public static void init(GameController g)
    {
       try {
          long startTime = System.nanoTime();
-         gc = g;
          System.out.println("first random is "+random.nextDouble());
+      
+         gc = g;
+         mMap = gc.startingMap(mars);
+         mWidth = (int) mMap.getWidth();
+         mHeight = (int) mMap.getHeight();
+         myTeam = gc.team();
+         moveDist = new int[mWidth][mHeight][mWidth][mHeight];
+         adjCount = new int[mWidth][mHeight];
+         pairs = new Pair[mWidth][mHeight];
+         mMapLoc = new MapLocation[mWidth][mHeight];
+         karbDep = new int[mWidth][mHeight];//amount of karbonite in the square
+         initKarb = new int[mWidth][mHeight];
+         karbAdj = new int[mWidth][mHeight];//sum of karbonite on and adjacent to the square
+         regions = new int[mWidth][mHeight];
+         usedMine = new int[mWidth][mHeight];
+         viableSite = new boolean[mWidth][mHeight];
+         siteID = new int[mWidth][mHeight];
+         adjPair = new HashSet[mWidth][mHeight];
       
          AsteroidPattern ap = gc.asteroidPattern();
          // for(int x = 1; x <= maxRound; x++)
@@ -541,14 +557,11 @@ import java.io.*;
          }
       for(int id: myUnits)
       {
+         if(tasks.get(id)==null)
+            tasks.put(id, new Task(id));
          UnitType ut = gc.unit(id).unitType();
          Location uLoc = gc.unit(id).location();
-         if(ut.equals(UnitType.Factory))
-         {
-            factories.add(id);
-            siteID[unitPair(id).x][unitPair(id).y] = id;
-         }
-         else if(ut.equals(UnitType.Healer))
+         if(ut.equals(UnitType.Healer))
          {
             healers.add(id);
          }
@@ -603,17 +616,6 @@ import java.io.*;
    //END OF UNIT METHODS
    
    //MAP METHODS
-   public static void launch(int id)
-   {
-      for(int x = 0; x < mWidth; x++)
-         for(int y = 0; y < mHeight; y++)
-            if(!launchLoc[x][y])
-               if(mMap.isPassableTerrainAt(mMapLoc[x][y])!=0)
-               {
-                  gc.launchRocket(id, mMapLoc[x][y]);
-                  launchLoc[x][y] = true;
-               }
-   }
    public static HashSet<Direction> nextMove(Pair start, Pair end, int goal)
    {
       if(end==null||moveDist[end.x][end.y][start.x][start.y]==goal)

@@ -20,20 +20,20 @@ import java.io.*;
    static Direction[] adjacent = {Direction.North, Direction.East, Direction.South, Direction.West, Direction.Northeast, Direction.Southeast, Direction.Northwest, Direction.Southwest};
    static HashMap<Direction, Pair> dirMove = new HashMap<Direction, Pair>();
    static GameController gc;
-   static PlanetMap eMap = gc.startingMap(earth);
-   static PlanetMap mMap = gc.startingMap(mars);
-   static int eWidth = (int) eMap.getWidth();
-   static int eHeight = (int) eMap.getHeight();
-   static int mWidth = (int) mMap.getWidth();
-   static int mHeight = (int) mMap.getHeight();
-   static Team myTeam = gc.team();
+   static PlanetMap eMap;
+   static PlanetMap mMap;
+   static int eWidth;
+   static int eHeight;
+   static int mWidth;
+   static int mHeight;
+   static Team myTeam;
    static Team enemyTeam;
    static Random random = new Random(1);
    static boolean rocketResearched = false;
-   static boolean[][] launchLoc = new boolean[mWidth][mHeight];
-   static int[][][][] moveDist = new int[eWidth][eHeight][eWidth][eHeight];
-   static int[][] adjCount = new int[eWidth][eHeight];
-   static Pair[][] pairs = new Pair[eWidth][eHeight];
+   static boolean[][] launchLoc;
+   static int[][][][] moveDist;
+   static int[][] adjCount;
+   static Pair[][] pairs;
    static int[] teamArray;
    static int rocketCap = 8;
    
@@ -56,25 +56,46 @@ import java.io.*;
    static HashSet<Pair> attackList = new HashSet<Pair>();
    
    // Map Info
-   static MapLocation[][] eMapLoc = new MapLocation[eWidth][eHeight];
-   static MapLocation[][] mMapLoc = new MapLocation[mWidth][mHeight];
-   static int[][] karbDep = new int[eWidth][eHeight];//amount of karbonite in the square
-   static int[][] karbAdj = new int[eWidth][eHeight];//sum of karbonite on and adjacent to the square
-   static int[][] regions = new int[eWidth][eHeight];
+   static MapLocation[][] eMapLoc;
+   static MapLocation[][] mMapLoc;
+   static int[][] karbDep;//amount of karbonite in the square
+   static int[][] karbAdj;//sum of karbonite on and adjacent to the square
+   static int[][] regions;
    static int regionCount = 0;
-   static int[][] usedMine = new int[eWidth][eHeight];
-   static boolean[][] viableSite = new boolean[eWidth][eHeight];
+   static int[][] usedMine;
+   static boolean[][] viableSite;
+   static int[][] siteID;
+   static HashSet<Pair>[][] adjPair;
    static boolean[] open = new boolean[512];
-   static int[][] siteID = new int[eWidth][eHeight];
-   static HashSet<Pair>[][] adjPair = new HashSet[eWidth][eHeight];
       
    public static void init(GameController g)
    {
-      gc = g;
       try {
          long startTime = System.nanoTime();
          System.out.println("first random is "+random.nextDouble());
          
+         gc = g;
+         eMap = gc.startingMap(earth);
+         mMap = gc.startingMap(mars);
+         eWidth = (int) eMap.getWidth();
+         eHeight = (int) eMap.getHeight();
+         mWidth = (int) mMap.getWidth();
+         mHeight = (int) mMap.getHeight();
+         myTeam = gc.team();
+         launchLoc = new boolean[mWidth][mHeight];
+         moveDist = new int[eWidth][eHeight][eWidth][eHeight];
+         adjCount = new int[eWidth][eHeight];
+         pairs = new Pair[eWidth][eHeight];
+         eMapLoc = new MapLocation[eWidth][eHeight];
+         mMapLoc = new MapLocation[mWidth][mHeight];
+         karbDep = new int[eWidth][eHeight];//amount of karbonite in the square
+         karbAdj = new int[eWidth][eHeight];//sum of karbonite on and adjacent to the square
+         regions = new int[eWidth][eHeight];
+         usedMine = new int[eWidth][eHeight];
+         viableSite = new boolean[eWidth][eHeight];
+         siteID = new int[eWidth][eHeight];
+         adjPair = new HashSet[eWidth][eHeight];
+            
          dirMove.put(Direction.North, new Pair(0, 1));
          dirMove.put(Direction.Northeast, new Pair(1, 1));
          dirMove.put(Direction.East, new Pair(1, 0));
